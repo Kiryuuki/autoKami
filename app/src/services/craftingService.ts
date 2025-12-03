@@ -40,10 +40,15 @@ export async function craftRecipe(
     console.log(`[Crafting] Target: ${systemAddress}`);
     // console.log(`[Crafting] Data: ${data}`);
 
+    // Fix for "account sequence mismatch": Explicitly fetch the pending nonce
+    const nonce = await provider.getTransactionCount(wallet.address, 'pending');
+    console.log(`[Crafting] Using nonce: ${nonce}`);
+
     const tx = await wallet.sendTransaction({
         to: systemAddress,
         data: data,
-        gasLimit: 3000000
+        gasLimit: 3000000,
+        nonce: nonce
     });
 
     console.log(`[Crafting] Tx submitted: ${tx.hash}`);
