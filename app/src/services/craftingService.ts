@@ -53,11 +53,25 @@ export async function craftRecipe(
 
     console.log(`[Crafting] Tx submitted: ${tx.hash}`);
     
-    const receipt = await tx.wait();
-    if (receipt && receipt.status === 1) {
-        return { success: true, txHash: tx.hash };
-    } else {
-        return { success: false, error: 'Transaction reverted' };
+    try {
+        const receipt = await tx.wait();
+        if (receipt && receipt.status === 1) {
+            return { success: true, txHash: tx.hash };
+        } else {
+            return { success: false, error: 'Transaction reverted' };
+        }
+    } catch (waitError: any) {
+        if (waitError.code === 'TRANSACTION_REPLACED') {
+            if (waitError.cancelled) {
+                return { success: false, error: 'Transaction cancelled' };
+            }
+            if (waitError.receipt && waitError.receipt.status === 1) {
+                console.log(`[Crafting] Transaction replaced but succeeded: ${waitError.receipt.hash}`);
+                return { success: true, txHash: waitError.receipt.hash };
+            }
+            return { success: false, error: 'Transaction replaced and reverted' };
+        }
+        throw waitError;
     }
   } catch (error: any) {
     console.error('[Crafting] Execution failed:', error);

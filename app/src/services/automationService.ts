@@ -88,28 +88,47 @@ export async function processCraftingAutomation() {
                         continue;
                     }
 
-                    const result = await craftRecipe(setting.recipe_id, setting.amount_to_craft, privateKey);
-                    
-                    // Always update last_run_at to prevent spamming, even on failure
-                    // User requested: "run the craft function after the interval... so that it will not keep spamming"
-                    await updateCraftingLastRun(setting.id!);
+                    const maxRetries = 3;
+                    let success = false;
+                    let attempt = 0;
 
-                    if (result.success) {
-                        await logSystemEvent({
-                            user_id: wallet.user_id,
-                            action: 'auto_craft',
-                            status: 'success',
-                            message: `Auto-crafted ${recipe.name} (x${setting.amount_to_craft}) for ${wallet.name}. Consumed ${requiredStamina} Stamina.`,
-                            metadata: { txHash: result.txHash, recipeId: setting.recipe_id, amount: setting.amount_to_craft, cost: requiredStamina }
-                        });
-                    } else {
-                        await logSystemEvent({
-                            user_id: wallet.user_id,
-                            action: 'auto_craft_fail',
-                            status: 'error',
-                            message: `Auto-craft failed: ${result.error}. Will retry in ${setting.interval_minutes} mins.`,
-                            metadata: { error: result.error }
-                        });
+                    while (attempt < maxRetries && !success) {
+                        attempt++;
+                        console.log(`[Crafting] Attempt ${attempt}/${maxRetries} for ${wallet.name}...`);
+
+                        const result = await craftRecipe(setting.recipe_id, setting.amount_to_craft, privateKey);
+                        
+                        if (result.success) {
+                            success = true;
+                            // Success: Update timer and log
+                            await updateCraftingLastRun(setting.id!);
+                            
+                            await logSystemEvent({
+                                user_id: wallet.user_id,
+                                action: 'auto_craft',
+                                status: 'success',
+                                message: `Auto-crafted ${recipe.name} (x${setting.amount_to_craft}) for ${wallet.name}. Consumed ${requiredStamina} Stamina.`,
+                                metadata: { txHash: result.txHash, recipeId: setting.recipe_id, amount: setting.amount_to_craft, cost: requiredStamina }
+                            });
+                        } else {
+                            console.error(`[Crafting] Attempt ${attempt} failed: ${result.error}`);
+                            
+                            if (attempt < maxRetries) {
+                                console.log(`[Crafting] Retrying in 1 minute...`);
+                                await new Promise(resolve => setTimeout(resolve, 60000)); // Wait 60s
+                            } else {
+                                // All retries failed: Update timer to wait full interval and log failure
+                                await updateCraftingLastRun(setting.id!);
+                                
+                                await logSystemEvent({
+                                    user_id: wallet.user_id,
+                                    action: 'auto_craft_fail',
+                                    status: 'error',
+                                    message: `Auto-craft failed after 3 attempts: ${result.error}. Will retry in ${setting.interval_minutes} mins.`,
+                                    metadata: { error: result.error }
+                                });
+                            }
+                        }
                     }
                 } else {
                     // Stamina not enough
