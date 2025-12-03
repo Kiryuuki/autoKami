@@ -331,9 +331,9 @@ const CharacterManagerPWA = () => {
   useEffect(() => {
     if (isCraftingModalOpen && configKami) {
       const profile = profiles.find(p => p.id === configKami.operator_wallet_id);
-      if (profile?.accountId) {
+      if (profile?.account_id) {
         setCraftingProfileStamina(null); // Reset while fetching
-        getAccountStamina(profile.accountId)
+        getAccountStamina(profile.account_id)
           .then(s => setCraftingProfileStamina(s))
           .catch(err => console.error('Failed to fetch stamina', err));
       } else {
@@ -562,9 +562,9 @@ const CharacterManagerPWA = () => {
         const profileName = profile?.name || 'Unknown Profile';
         
         let staminaMsg = '';
-        if (profile?.accountId) {
+        if (profile?.account_id) {
             try {
-                const stamina = await getAccountStamina(profile.accountId);
+                const stamina = await getAccountStamina(profile.account_id);
                 staminaMsg = ` : ${stamina}`;
             } catch (e) {
                 console.error('Failed to fetch stamina for log', e);
