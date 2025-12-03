@@ -194,11 +194,9 @@ const CharacterCard = memo(({
 CharacterCard.displayName = 'CharacterCard';
 
 // Memoized Character Details Component
-const CharacterDetails = memo(({ char, theme, onToggleAutomation, onOpenSettings }: { 
+const CharacterDetails = memo(({ char, theme }: { 
   char: Kami; 
   theme: any;
-  onToggleAutomation: (id: string) => void;
-  onOpenSettings: () => void;
 }) => (
   <>
     {/* Character sprite */}
@@ -289,7 +287,6 @@ const CharacterManagerPWA = () => {
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [isCraftingModalOpen, setIsCraftingModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [isMobileDetailsOpen, setIsMobileDetailsOpen] = useState(false);
   const [configKami, setConfigKami] = useState<Kami | null>(null);
   
   // Settings State
@@ -658,8 +655,6 @@ const CharacterManagerPWA = () => {
                   <CharacterDetails 
                     char={selectedChar} 
                     theme={theme} 
-                    onToggleAutomation={toggleAutomation}
-                    onOpenSettings={() => setIsSettingsModalOpen(true)}
                   />
                 ) : (
                   <div className="p-8 text-center opacity-50 h-full flex flex-col justify-center">
