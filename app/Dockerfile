@@ -18,6 +18,16 @@ COPY app/ .
 COPY abi/ ./abi
 COPY ids/ ./ids
 
+# Build args for frontend
+ARG VITE_PRIVY_APP_ID
+ARG VITE_API_URL
+ARG VITE_KAMI_IMAGE_BASE_URL
+
+# Set as env vars for build
+ENV VITE_PRIVY_APP_ID=$VITE_PRIVY_APP_ID
+ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_KAMI_IMAGE_BASE_URL=$VITE_KAMI_IMAGE_BASE_URL
+
 # Build frontend
 RUN cd frontend && npm run build
 

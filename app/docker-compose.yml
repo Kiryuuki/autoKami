@@ -2,28 +2,38 @@ services:
   ts-kamigotchi:
     image: tailscale/tailscale:latest
     container_name: ts-kamigotchi
-    hostname: kamigotchi
+    hostname: kamiAuto
     environment:
       - TS_AUTHKEY=tskey-auth-k5aniem7tk11CNTRL-fTYyF25cC88SA6mbyGQ988B89FY4zffrA
       - TS_STATE_DIR=/var/lib/tailscale
-      - TS_USERSPACE=true 
+      - TS_USERSPACE=true
     volumes:
       - ts-data:/var/lib/tailscale
-      # /dev/net/tun is often problematic on Windows/WSL2 without specific kernel modules, 
-      # so we default to userspace networking (tun=false above) for higher compatibility.
-      # If you have tun support, set TS_USERSPACE=false and uncomment below:
-      # - /dev/net/tun:/dev/net/tun
     cap_add:
       - NET_ADMIN
       - NET_RAW
     restart: unless-stopped
-    ports:
-      - "3009:3000" # Expose 3000 to the host machine (localhost:3000)
+    command: sh -c "
+      /usr/local/bin/containerboot &
+      sleep 10 &&
+      until tailscale status 2>/dev/null; do
+        echo 'Waiting for tailscale to be ready...' &&
+        sleep 2;
+      done &&
+      echo 'Tailscale is connected. Setting up serve...' &&
+      tailscale serve --bg --https=443 http://127.0.0.1:3000 &&
+      echo 'Tailscale serve configured!' &&
+      tail -f /dev/null
+      "
 
   kamigotchi-app:
     build: 
       context: ..
       dockerfile: app/Dockerfile
+      args:
+        - VITE_PRIVY_APP_ID=${VITE_PRIVY_APP_ID}
+        - VITE_API_URL=${VITE_API_URL}
+        - VITE_KAMI_IMAGE_BASE_URL=${VITE_KAMI_IMAGE_BASE_URL}
     image: kamigotchi-app:latest
     container_name: kamigotchi-app
     # Share network namespace with Tailscale container
