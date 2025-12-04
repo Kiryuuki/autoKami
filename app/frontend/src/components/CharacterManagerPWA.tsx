@@ -1583,8 +1583,6 @@ const CharacterManagerPWA = () => {
                   Click <span className="text-blue-400 font-bold">COMPUTE</span> to see harvest analysis
                 </div>
               )}
-                </div>
-              </div>
             </div>
 
             {/* Footer */}
@@ -1756,6 +1754,9 @@ const CharacterManagerPWA = () => {
               </div> {/* Close Grid */}
 
             </div> {/* Close p-6 */}
+
+            {/* Footer */}
+            <div className="bg-gray-800 p-4 border-t-4 border-gray-700 flex justify-end gap-3">
               <button 
                 onClick={() => setIsCraftingModalOpen(false)}
                 className="px-4 py-2 text-gray-400 hover:text-white font-bold"
@@ -1770,8 +1771,8 @@ const CharacterManagerPWA = () => {
                 SAVE CONFIG
               </button>
             </div>
+            </div>
           </div>
-        </div>
       )}
     </div>
   );
