@@ -14,9 +14,10 @@ import {
     getAutoCraftingSettings,
     upsertAutoCraftingSettings
 } from '../services/supabaseService.js';
-import { getKamisByAccountId } from '../services/accountService.js';
+import { getKamisByAccountId, getAccountById } from '../services/accountService.js';
 import { startHarvest, stopHarvestByKamiId, isKamiHarvesting } from '../services/harvestService.js';
 import { processCraftingAutomation } from '../services/automationService.js';
+import { getKamiById } from '../services/kamiService.js';
 
 const router = Router();
 
@@ -318,6 +319,36 @@ router.post('/:id/harvest/start', async (req: Request, res: Response) => {
             const profile = await getOrCreateKamiProfile(kami.id, kami.operator_wallet_id);
             harvestNodeIndex = profile.harvest_node_index || kami.room_index || 0;
         }
+
+        // --- Location Check ---
+        try {
+            const kamiData = await getKamiById(kami.kami_entity_id);
+            const account = await getAccountById(kamiData.account);
+            
+            if (account && account.room !== harvestNodeIndex) {
+                const msg = `Manual start failed: Account is in Room #${account.room}, but target is Node #${harvestNodeIndex}. Please move manually.`;
+                
+                // Log the failed attempt
+                const profile = await getOrCreateKamiProfile(kami.id, kami.operator_wallet_id);
+                await logSystemEvent({
+                    user_id: kami.user_id,
+                    kami_index: kami.kami_index,
+                    kami_profile_id: profile.id,
+                    action: 'manual_start_harvest_fail',
+                    status: 'error',
+                    message: msg,
+                    metadata: { currentRoom: account.room, targetNode: harvestNodeIndex }
+                });
+
+                return res.status(400).json({ error: msg });
+            }
+        } catch (e) {
+            console.error('[ManualStart] Location check failed:', e);
+            // Don't block on check failure, try to proceed or fail?
+            // Better to fail safely if we can't verify
+            return res.status(500).json({ error: 'Failed to verify location before harvest.' });
+        }
+        // ----------------------
 
         // Decrypt private key
         const privateKey = await decryptPrivateKey(kami.encrypted_private_key);

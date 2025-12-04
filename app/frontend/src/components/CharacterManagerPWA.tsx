@@ -613,6 +613,18 @@ const CharacterManagerPWA = () => {
     const cycleDuration = harvestDuration + restDuration;
     const cyclesUntilDeath = health / Math.abs(totalStrainPerCycle - totalRecoveryPerCycle);
 
+    // HP at end of configured harvest duration
+    const hpAfterHarvest = health - totalStrainPerCycle;
+    const hpAfterHarvestPercent = (hpAfterHarvest / health) * 100;
+
+    // HP after full rest duration (starting from hpAfterHarvest)
+    const hpAfterRest = hpAfterHarvest + totalRecoveryPerCycle;
+    const hpAfterRestPercent = (hpAfterRest / health) * 100;
+
+    // Total MUSU earned during harvest duration
+    const avgMusuRate = (musuPerHourStart + musuPerHourAtDuration) / 2;
+    const totalMusuEarned = avgMusuRate * (harvestDuration / 60);
+
     // Current HP calculations (if harvesting)
     let currentHP = health;
     let hpLostSoFar = 0;
@@ -673,6 +685,13 @@ const CharacterManagerPWA = () => {
       isSustainable: netHpPerCycle >= 0,
       harvestDuration,
       restDuration,
+      // Configured duration results
+      hpAfterHarvest,
+      hpAfterHarvestPercent,
+      hpAfterRest,
+      hpAfterRestPercent,
+      totalMusuEarned,
+      avgMusuRate,
       // New current HP fields
       isCurrentlyHarvesting,
       currentHarvestTimeElapsed,
@@ -1160,7 +1179,7 @@ const CharacterManagerPWA = () => {
       {/* Config Modal */}
       {isConfigModalOpen && configKami && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 font-mono overflow-y-auto">
-          <div className={`${theme.modal} w-full max-w-md text-white overflow-hidden shadow-2xl my-8`}>
+          <div className={`${theme.modal} w-full max-w-4xl text-white overflow-hidden shadow-2xl my-8`}>
             {/* Header */}
             <div className="bg-gray-800 p-4 border-b-4 border-gray-700 flex justify-between items-start">
               <div>
@@ -1271,26 +1290,26 @@ const CharacterManagerPWA = () => {
                   </div>
                 </label>
               </div>
+                </div>
 
-              {/* Compute Button */}
-              <div className="pt-4 border-t border-gray-700">
-                <button
-                  onClick={calculateHarvestStats}
-                  className="w-full bg-blue-500 hover:bg-blue-600 text-white px-4 py-3 rounded font-bold flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  COMPUTE HARVEST STATS
-                </button>
-              </div>
+                {/* RIGHT COLUMN: Analysis Results */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-b border-gray-700 pb-2">
+                    <span className="text-sm font-bold text-yellow-400 uppercase">📊 Analysis</span>
+                    <button
+                      onClick={calculateHarvestStats}
+                      className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1 shadow-lg shadow-blue-500/20"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      COMPUTE
+                    </button>
+                  </div>
 
               {/* Calculation Results */}
-              {harvestCalc && (
-                <div className="mt-4 p-4 bg-gray-900/50 rounded border border-gray-700 space-y-3 text-sm">
-                  <div className="flex items-center justify-between border-b border-gray-700 pb-2">
-                    <span className="font-bold text-yellow-400">📊 HARVEST ANALYSIS</span>
-                    <span className="text-xs text-gray-500">
-                      {configKami.affinities.join('/')} on {harvestCalc.nodeType.toUpperCase()}
-                    </span>
+              {harvestCalc ? (
+                <div className="space-y-3 text-sm">
+                  <div className="text-xs text-gray-500">
+                    {configKami.affinities.join('/')} on {harvestCalc.nodeType.toUpperCase()}
                   </div>
 
                   {/* Current HP Status (if harvesting) */}
@@ -1364,6 +1383,96 @@ const CharacterManagerPWA = () => {
                       </div>
                     </div>
                   )}
+
+                  {/* Cycle Prediction Section */}
+                  <div className="bg-gradient-to-r from-purple-900/40 to-blue-900/40 p-4 rounded-lg border-2 border-purple-500/50 shadow-lg">
+                    <div className="text-sm font-bold text-purple-300 mb-3 flex items-center gap-2">
+                      🎯 CYCLE PREDICTION ({harvestCalc.harvestDuration}m harvest + {harvestCalc.restDuration}m rest)
+                    </div>
+
+                    {/* Harvest Phase */}
+                    <div className="bg-red-900/30 rounded p-3 mb-2 border border-red-700/50">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-xs text-red-300 font-bold">⚔️ After Harvesting ({harvestCalc.harvestDuration}m)</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <div className="text-[0.65rem] text-gray-400">HP Remaining</div>
+                          <div className={`text-xl font-bold ${
+                            harvestCalc.hpAfterHarvestPercent > 50 ? 'text-green-400' :
+                            harvestCalc.hpAfterHarvestPercent > 25 ? 'text-yellow-400' :
+                            'text-red-400'
+                          }`}>
+                            {harvestCalc.hpAfterHarvest.toFixed(1)} HP
+                          </div>
+                          <div className="text-[0.65rem] text-gray-500">
+                            ({harvestCalc.hpAfterHarvestPercent.toFixed(1)}%)
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[0.65rem] text-gray-400">MUSU Earned</div>
+                          <div className="text-xl font-bold text-green-400">
+                            {harvestCalc.totalMusuEarned.toFixed(1)}
+                          </div>
+                          <div className="text-[0.65rem] text-gray-500">
+                            ~{harvestCalc.avgMusuRate.toFixed(1)} MUSU/hr
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-2 pt-2 border-t border-red-800">
+                        <div className="text-[0.65rem] text-red-300">
+                          HP Lost: {harvestCalc.totalStrainPerCycle.toFixed(1)} HP (Avg: {harvestCalc.avgStrain.toFixed(2)} HP/hr)
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Rest Phase */}
+                    <div className="bg-blue-900/30 rounded p-3 border border-blue-700/50">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-xs text-blue-300 font-bold">😴 After Resting ({harvestCalc.restDuration}m)</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <div className="text-[0.65rem] text-gray-400">HP After Rest</div>
+                          <div className={`text-xl font-bold ${
+                            harvestCalc.hpAfterRestPercent > 90 ? 'text-green-400' :
+                            harvestCalc.hpAfterRestPercent > 70 ? 'text-blue-400' :
+                            'text-yellow-400'
+                          }`}>
+                            {Math.min(harvestCalc.hpAfterRest, configKami.finalStats.health).toFixed(1)} HP
+                          </div>
+                          <div className="text-[0.65rem] text-gray-500">
+                            ({Math.min(harvestCalc.hpAfterRestPercent, 100).toFixed(1)}%)
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[0.65rem] text-gray-400">HP Restored</div>
+                          <div className="text-xl font-bold text-blue-400">
+                            +{harvestCalc.totalRecoveryPerCycle.toFixed(1)}
+                          </div>
+                          <div className="text-[0.65rem] text-gray-500">
+                            {harvestCalc.recovery.toFixed(2)} HP/hr
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-2 pt-2 border-t border-blue-800">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-gray-400">Net HP Change:</span>
+                          <span className={`font-bold ${harvestCalc.netHpPerCycle >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {harvestCalc.netHpPerCycle >= 0 ? '+' : ''}{harvestCalc.netHpPerCycle.toFixed(1)} HP
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Sustainability Badge */}
+                    <div className={`mt-2 p-2 rounded text-center font-bold text-sm ${
+                      harvestCalc.isSustainable ? 'bg-green-900/50 text-green-300 border border-green-600' :
+                      'bg-red-900/50 text-red-300 border border-red-600'
+                    }`}>
+                      {harvestCalc.isSustainable ? '✅ Sustainable Cycle' : '⚠️ Losing HP Each Cycle'}
+                    </div>
+                  </div>
 
                   {/* Affinity */}
                   <div className="grid grid-cols-2 gap-2 text-xs">
@@ -1469,7 +1578,13 @@ const CharacterManagerPWA = () => {
                     )}
                   </div>
                 </div>
+              ) : (
+                <div className="p-6 text-center text-gray-500 text-sm border border-gray-700 rounded bg-gray-800/30">
+                  Click <span className="text-blue-400 font-bold">COMPUTE</span> to see harvest analysis
+                </div>
               )}
+                </div>
+              </div>
             </div>
 
             {/* Footer */}
@@ -1513,7 +1628,33 @@ const CharacterManagerPWA = () => {
               </button>
             </div>
 
-            <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+            <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+              {/* Kami Stats Overview */}
+              <div className="grid grid-cols-4 gap-3 p-3 bg-gray-800/50 rounded border border-gray-700">
+                <div className="text-center">
+                  <div className="text-xs text-gray-400">Health</div>
+                  <div className="text-lg font-bold text-green-400">{configKami.finalStats.health}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs text-gray-400">Power</div>
+                  <div className="text-lg font-bold text-blue-400">{configKami.finalStats.power}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs text-gray-400">Harmony</div>
+                  <div className="text-lg font-bold text-purple-400">{configKami.finalStats.harmony}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs text-gray-400">Violence</div>
+                  <div className="text-lg font-bold text-red-400">{configKami.finalStats.violence}</div>
+                </div>
+              </div>
+
+              {/* 2-Column Layout */}
+              <div className="grid lg:grid-cols-2 gap-6">
+                {/* LEFT COLUMN: Configuration */}
+                <div className="space-y-4">
+                  <div className="text-sm font-bold text-yellow-400 uppercase border-b border-gray-700 pb-2">⚙️ Configuration</div>
+
               {/* Toggle */}
               <label className="flex items-center gap-3 cursor-pointer group">
                 <div className="relative">

@@ -7,7 +7,29 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Load mapping files
-const mappingDir = join(__dirname, '../../../mapping');
+// Robust path resolution for Docker vs Local
+const possibleMappingPaths = [
+    join(process.cwd(), 'mapping'),       // Local root / Docker working dir
+    join(process.cwd(), '../mapping'),    // Local dev from app/
+    join(__dirname, '../../../mapping'),  // Relative from src/utils
+    '/app/mapping'                        // Absolute Docker path
+];
+
+let mappingDir = '';
+import { existsSync } from 'fs';
+
+for (const p of possibleMappingPaths) {
+    if (existsSync(p)) {
+        mappingDir = p;
+        console.log(`[Mappings] Found mapping directory at: ${mappingDir}`);
+        break;
+    }
+}
+
+if (!mappingDir) {
+    console.warn('[Mappings] ⚠️ Mapping directory not found in standard paths. Defaulting to relative.');
+    mappingDir = join(__dirname, '../../../mapping');
+}
 
 export interface NodeMapping {
   index: number;

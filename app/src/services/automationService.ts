@@ -346,6 +346,22 @@ async function checkKami(profile: any) {
                     // Check Account Location
                     const account = await getAccountById(kamiData.account);
                     if (account && account.room !== nodeIndex) {
+                        const msg = `Automation stopped: Account is in Room #${account.room}, but target is Node #${nodeIndex}. Please move manually.`;
+                        console.warn(`[Automation] 🛑 ${msg}`);
+                        
+                        await logSystemEvent({
+                            user_id: userId,
+                            kami_index: kami.kami_index,
+                            kami_profile_id: profile.id,
+                            action: 'automation_stopped',
+                            status: 'error',
+                            message: msg,
+                            metadata: { currentRoom: account.room, targetNode: nodeIndex }
+                        });
+                        return; // Stop processing for this Kami
+
+                        /* 
+                        // Auto-move logic disabled for now
                         console.log(`[Automation] Account is in Room #${account.room}, moving to Node #${nodeIndex}...`);
                         await logSystemEvent({
                             user_id: userId,
@@ -361,6 +377,7 @@ async function checkKami(profile: any) {
                             throw new Error(`Failed to move account: ${moveResult.error}`);
                         }
                         console.log(`[Automation] Account moved successfully.`);
+                        */
                     }
 
                     // Check Kami Location (Warn only, assuming account move might suffice or kami follows)

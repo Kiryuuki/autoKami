@@ -17,6 +17,7 @@ COPY app/ .
 # Copy abi and ids folders from root to /app/abi and /app/ids
 COPY abi/ ./abi
 COPY ids/ ./ids
+COPY mapping/ ./mapping
 
 # Build args for frontend
 ARG VITE_PRIVY_APP_ID
@@ -52,6 +53,7 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/frontend/dist ./frontend/dist
 COPY --from=builder /app/abi ./abi
 COPY --from=builder /app/ids ./ids
+COPY --from=builder /app/mapping ./mapping
 
 # Copy env file from app/ folder
 COPY app/.env .env
