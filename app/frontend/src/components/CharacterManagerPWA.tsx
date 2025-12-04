@@ -715,13 +715,13 @@ const CharacterManagerPWA = () => {
 
               {/* Action Buttons */}
               <div className={`${currentTheme === 'frosted' ? 'bg-white/20' : 'bg-gray-300'} p-3 flex gap-2 border-t-4 border-gray-800/20 flex-shrink-0 overflow-x-auto`}>
-                {/* Mobile Start/Stop Button */}
+                {/* Start/Stop Button */}
                 <button
                   disabled={!selectedChar}
                   onClick={() => selectedChar && toggleAutomation(selectedChar.id)}
-                  className={`flex-1 py-3 px-2 flex items-center justify-center gap-2 ${theme.button} lg:hidden text-white
-                    ${selectedChar?.running 
-                      ? 'bg-red-500 hover:bg-red-600 border-red-700' 
+                  className={`flex-1 py-3 px-2 flex items-center justify-center gap-2 ${theme.button} text-white
+                    ${selectedChar?.running
+                      ? 'bg-red-500 hover:bg-red-600 border-red-700'
                       : 'bg-green-500 hover:bg-green-600 border-green-700'}
                     disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400 disabled:border-gray-500
                   `}

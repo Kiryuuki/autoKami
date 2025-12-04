@@ -10,7 +10,8 @@
       "Bash(npm install:*)",
       "Bash(del \"C:\\Users\\Yuuki\\Kami\\kamigotchi-abis\\app\\frontend\\src\\App.css\" 2)",
       "Bash(nul)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(dir /B /S \"C:\\Users\\MY PC\\Documents\\Kamigotchi\\autoKami\")"
     ],
     "deny": [],
     "ask": []
