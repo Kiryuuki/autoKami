@@ -1748,10 +1748,14 @@ const CharacterManagerPWA = () => {
                   );
                 }
                 return null;
-              })()} 
-            </div>
+              })()}
+                </div> {/* Close Left Column */}
+                
+                {/* Right Column */}
+                <div></div> 
+              </div> {/* Close Grid */}
 
-            <div className="bg-gray-800 p-4 border-t-4 border-gray-700 flex justify-end gap-3">
+            </div> {/* Close p-6 */}
               <button 
                 onClick={() => setIsCraftingModalOpen(false)}
                 className="px-4 py-2 text-gray-400 hover:text-white font-bold"
