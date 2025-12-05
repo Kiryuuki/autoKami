@@ -179,8 +179,14 @@ export async function getKamiState(kamiId: string): Promise<{ state: number, cur
     
     try {
         const kami = await getter.getKami(BigInt(kamiId));
+        
+        const rawState = kami.state;
+        console.log(`[Harvest] Raw Kami #${kamiId} state: "${rawState}"`);
+
+        const stateNum = rawState === 'HARVESTING' ? 1 : 0;
+
         return {
-            state: Number(kami.state),
+            state: stateNum,
             currentHealth: Number(kami.stats.health.base)
         };
     } catch (e) {

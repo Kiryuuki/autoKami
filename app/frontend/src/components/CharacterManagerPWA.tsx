@@ -9,6 +9,8 @@ import {
   getSystemLogs,
   deleteKamigotchi,
   updateAutomation,
+  stopHarvestKamigotchi,
+  getHarvestStatus,
   type AutomationSettings,
   addProfile,
   updateTelegramSettings,
@@ -16,6 +18,7 @@ import {
   sendTestTelegramMessage,
   getAccountStamina
 } from '../services/api';
+import { supabase } from '../services/supabase';
 import { NODE_LIST } from '../assets/nodeList';
 import { getBackgroundList } from '../assets/backgrounds';
 
@@ -422,6 +425,74 @@ const CharacterManagerPWA = () => {
     fetchData();
   }, [authenticated, user, profiles, currentProfileIndex, refreshKey]);
 
+  // Real-time Log Subscription
+  useEffect(() => {
+    if (!user?.id) return;
+
+    console.log('[Realtime] Subscribing to system_logs...');
+    const channel = supabase
+      .channel('system-logs-feed')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'system_logs',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const newLog = payload.new as any;
+          // console.log('[Realtime] New log received:', newLog);
+          
+          setSystemLogs(prev => [{
+            id: newLog.id,
+            time: new Date(newLog.created_at).toLocaleTimeString('en-US', { hour12: false }),
+            message: newLog.kami_index !== undefined ? `[Kami #${newLog.kami_index}] ${newLog.message}` : newLog.message,
+            type: (newLog.status === 'error' ? 'error' : newLog.status === 'warning' ? 'warning' : 'success') as 'error' | 'warning' | 'success',
+            kami_index: newLog.kami_index
+          }, ...prev].slice(0, 50));
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('[Realtime] Connected to system_logs');
+        } else if (status === 'CLOSED') {
+          console.log('[Realtime] Disconnected');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('[Realtime] Channel error');
+        }
+      });
+
+    return () => {
+      console.log('[Realtime] Cleaning up subscription');
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
+
+  // Global Error Handler (Capture browser console errors to UI)
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      // Filter out common non-critical errors if needed
+      if (event.message.includes('ResizeObserver')) return;
+      addLog(`Browser Error: ${event.message}`, 'error');
+    };
+
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      // Extract meaningful message
+      const reason = event.reason?.message || event.reason || 'Unknown error';
+      if (reason.toString().includes('ResizeObserver')) return;
+      addLog(`Browser Error: ${reason}`, 'error');
+    };
+
+    window.addEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleRejection);
+
+    return () => {
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleRejection);
+    };
+  }, [addLog]);
+
   // Add log entry
   const addLog = useCallback((message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info') => {
     const now = new Date();
@@ -463,25 +534,68 @@ const CharacterManagerPWA = () => {
     if (!char) return;
 
     const originalState = char.running;
-    const newState = !char.running;
+    const isStarting = !char.running;
     
-    setCharacters(chars => chars.map(c => c.id === charId ? { ...c, running: newState } : c));
-    addLog(`Character "${char.name}" automation ${newState ? 'starting...' : 'stopping...'}`, 'info');
+    // Optimistic update
+    setCharacters(chars => chars.map(c => c.id === charId ? { ...c, running: isStarting } : c));
+    addLog(`Character "${char.name}" ${isStarting ? 'starting' : 'stopping'}...`, 'info');
 
     try {
-      // Toggle automation setting
-      const { success } = await updateAutomation(char.id, { autoHarvestEnabled: newState });
-      
-      if (success) {
-        addLog(`Character "${char.name}" automation ${newState ? 'started' : 'stopped'}`, 'success');
+      if (isStarting) {
+          // STARTING: Just enable automation
+          const { success } = await updateAutomation(char.id, { autoHarvestEnabled: true });
+          if (success) {
+            addLog(`Automation ENABLED for "${char.name}".`, 'success');
+          } else {
+            throw new Error('Backend returned failure');
+          }
       } else {
-        throw new Error('Backend returned failure');
+          // STOPPING: 
+          // 1. Disable automation (so it doesn't auto-restart)
+          await updateAutomation(char.id, { autoHarvestEnabled: false });
+          addLog(`Automation DISABLED for "${char.name}". Checking on-chain status...`, 'info');
+
+          // 2. Check status BEFORE trying to stop
+          // We use entity_id for the blockchain check
+          try {
+              const status = await getHarvestStatus(char.entity_id);
+              
+              if (status.isHarvesting) {
+                  addLog(`Kami is active. Sending stop harvest transaction...`, 'info');
+                  const result = await stopHarvestKamigotchi(char.id);
+                  
+                  if (result.success) {
+                     addLog(`Harvest STOPPED for "${char.name}" (Tx: ${result.txHash?.substring(0, 8)}...)`, 'success');
+                  } else {
+                     const msg = result.error || 'Unknown error';
+                     addLog(`Failed to stop harvest: ${msg}`, 'error');
+                  }
+              } else {
+                  addLog(`Kami is already Resting/Idle. No transaction needed.`, 'success');
+              }
+          } catch (checkErr: any) {
+              console.error('Failed to check status:', checkErr);
+              addLog(`Could not verify on-chain status. Manual stop skipped.`, 'warning');
+          }
       }
 
     } catch (err: any) {
       console.error('Failed to toggle automation', err);
-      setCharacters(chars => chars.map(c => c.id === charId ? { ...c, running: originalState } : c));
-      addLog(`Failed to toggle automation: ${err.message}`, 'error');
+      // Only revert UI if the initial switch failed (updateAutomation)
+      // If we are stopping, and updateAutomation worked but stopHarvest failed, we DO NOT revert.
+      if (isStarting) {
+         setCharacters(chars => chars.map(c => c.id === charId ? { ...c, running: originalState } : c));
+         addLog(`Failed to start: ${err.message}`, 'error');
+      } else {
+         // For stopping, if updateAutomation failed, we revert.
+         if (!err.response && err.message !== 'Backend returned failure') {
+             // Assume it was the stopHarvest call that threw? 
+             // stopHarvestKamigotchi catches errors and returns {success:false}, so it shouldn't throw here unless network error.
+             // If updateAutomation threw, we revert.
+             setCharacters(chars => chars.map(c => c.id === charId ? { ...c, running: originalState } : c));
+             addLog(`Failed to stop: ${err.message}`, 'error');
+         }
+      }
     }
   }, [characters, addLog]);
 
