@@ -34,6 +34,8 @@ services:
         - VITE_PRIVY_APP_ID=${VITE_PRIVY_APP_ID}
         - VITE_API_URL=${VITE_API_URL}
         - VITE_KAMI_IMAGE_BASE_URL=${VITE_KAMI_IMAGE_BASE_URL}
+        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+        - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
     image: kamigotchi-app:latest
     container_name: kamigotchi-app
     # Share network namespace with Tailscale container
