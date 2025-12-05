@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
-import { Play, Square, Settings, Trash2, ChevronLeft, ChevronRight, RefreshCw, X, Save, Plus, Send, LogOut, Hammer } from 'lucide-react';
+import { Play, Square, Settings, Trash2, ChevronLeft, ChevronRight, RefreshCw, X, Save, Plus, Send, LogOut, Hammer, Sliders } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
 import { RECIPE_LIST } from '../assets/recipeList';
 import { 
@@ -1051,7 +1051,7 @@ const CharacterManagerPWA = () => {
                   onClick={openConfigModal}
                   className={`flex-1 py-3 px-2 flex items-center justify-center gap-2 ${theme.button} ${currentTheme === 'arcade' ? 'bg-white hover:bg-gray-100' : 'bg-white/80 hover:bg-white'} disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
-                  <Settings className="w-5 h-5" />
+                  <Sliders className="w-5 h-5" />
                   <span className="hidden sm:inline">CONFIG</span>
                 </button>
                 <button
@@ -1076,6 +1076,13 @@ const CharacterManagerPWA = () => {
                 >
                   <Trash2 className="w-5 h-5" />
                   <span className="hidden sm:inline">DELETE</span>
+                </button>
+                <button
+                  onClick={() => setIsSettingsModalOpen(true)}
+                  className={`flex-1 py-3 px-2 flex items-center justify-center gap-2 ${theme.button} ${currentTheme === 'arcade' ? 'bg-white hover:bg-gray-100' : 'bg-white/80 hover:bg-white'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  <Settings className="w-5 h-5" />
+                  <span className="hidden sm:inline">SETTINGS</span>
                 </button>
               </div>
             </div>
