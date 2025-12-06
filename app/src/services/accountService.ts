@@ -128,3 +128,203 @@ export async function moveAccount(privateKey: string, roomIndex: number): Promis
         }
     });
 }
+
+export async function getAccountInventory(accountId: string): Promise<Record<number, number>> {
+
+    try {
+
+        const inventory: Record<number, number> = {};
+
+        
+
+        // Load Component Addresses
+
+        const keysId = (components as any).Keys.encodedID;
+
+        const valuesId = (components as any).Values.encodedID;
+
+        const slotsId = (components as any).Slots.encodedID;
+
+        const ownsInvId = (components as any).OwnsInvID.encodedID;
+
+        const itemIndexId = (components as any).ItemIndex.encodedID;
+
+        const valueId = (components as any).Value.encodedID;
+
+        
+
+        const keysAddr = await getComponentAddress(keysId);
+
+        const valuesAddr = await getComponentAddress(valuesId);
+
+        const slotsAddr = await getComponentAddress(slotsId);
+
+        const ownsInvAddr = await getComponentAddress(ownsInvId);
+
+        const itemIndexAddr = await getComponentAddress(itemIndexId);
+
+        const valueAddr = await getComponentAddress(valueId);
+
+        
+
+        const KeysABI = loadAbi('KeysComponent.json');
+
+        const ValuesABI = loadAbi('ValuesComponent.json');
+
+        const OwnsInvABI = ["function getEntitiesWithValue(uint256 value) view returns (uint256[])"];
+
+        const ItemIndexABI = ["function get(uint256 entity) view returns (uint32)", "function has(uint256 entity) view returns (bool)"];
+
+        const ValueABI = ["function get(uint256 entity) view returns (uint256)"];
+
+        
+
+        const Keys = new ethers.Contract(keysAddr, KeysABI.abi, provider);
+
+        const Values = new ethers.Contract(valuesAddr, ValuesABI.abi, provider);
+
+        const Slots = new ethers.Contract(slotsAddr, KeysABI.abi, provider);
+
+        const OwnsInv = new ethers.Contract(ownsInvAddr, OwnsInvABI, provider);
+
+        const ItemIndex = new ethers.Contract(itemIndexAddr, ItemIndexABI, provider);
+
+        const Value = new ethers.Contract(valueAddr, ValueABI, provider);
+
+
+
+        // 1. Check Entity-based Inventory (New Standard)
+
+        try {
+
+            const invEntities = await OwnsInv.getEntitiesWithValue(accountId);
+
+            if (invEntities && invEntities.length > 0) {
+
+                // Process in parallel chunks to speed up
+
+                const chunkSize = 20;
+
+                for (let i = 0; i < invEntities.length; i += chunkSize) {
+
+                    const chunk = invEntities.slice(i, i + chunkSize);
+
+                    await Promise.all(chunk.map(async (entityId: bigint) => {
+
+                        try {
+
+                            // Check if it's an item
+
+                            const hasItem = await ItemIndex.has(entityId);
+
+                            if (hasItem) {
+
+                                const itemId = await ItemIndex.get(entityId);
+
+                                const amount = await Value.get(entityId);
+
+                                inventory[Number(itemId)] = (inventory[Number(itemId)] || 0) + Number(amount);
+
+                            }
+
+                        } catch (e) {
+
+                            // Ignore individual item fetch errors
+
+                        }
+
+                    }));
+
+                }
+
+            }
+
+        } catch (e) {
+
+            console.warn(`[Inventory] Entity-based check failed:`, e);
+
+        }
+
+
+
+        // 2. Check Legacy Keys/Slots (Fallback)
+
+        const idsToCheck = [
+
+            BigInt(accountId),
+
+            ethers.solidityPackedKeccak256(["string", "uint256"], ["inventory", BigInt(accountId)])
+
+        ];
+
+
+
+        for (const id of idsToCheck) {
+
+            // A. Check Keys Component
+
+            try {
+
+                const items = await Keys.getFunction('get(uint256)')(id);
+
+                if (items && items.length > 0) {
+
+                    const amounts = await Values.getFunction('get(uint256)')(id);
+
+                    for (let i = 0; i < items.length; i++) {
+
+                        const itemId = Number(items[i]);
+
+                        const amount = Number(amounts[i]);
+
+                        inventory[itemId] = (inventory[itemId] || 0) + amount;
+
+                    }
+
+                }
+
+            } catch (innerError) { }
+
+
+
+            // B. Check Slots Component
+
+            try {
+
+                const items = await Slots.getFunction('get(uint256)')(id);
+
+                if (items && items.length > 0) {
+
+                    const amounts = await Values.getFunction('get(uint256)')(id);
+
+                    for (let i = 0; i < items.length; i++) {
+
+                        const itemId = Number(items[i]);
+
+                        const amount = Number(amounts[i]);
+
+                        inventory[itemId] = (inventory[itemId] || 0) + amount;
+
+                    }
+
+                }
+
+            } catch (innerError) { }
+
+        }
+
+
+
+        return inventory;
+
+    } catch (error) {
+
+        console.error(`[Account] Failed to fetch inventory for ${accountId}:`, error);
+
+        return {}; // Return empty inventory on error
+
+    }
+
+}
+
+

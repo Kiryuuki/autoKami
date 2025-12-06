@@ -21,6 +21,7 @@ import {
 import { supabase } from '../services/supabase';
 import { NODE_LIST } from '../assets/nodeList';
 import { getBackgroundList } from '../assets/backgrounds';
+import { getItemName } from '../utils/itemMapping';
 
 // Stat Icons
 import HealthIcon from '../assets/stats/health.png';
@@ -1804,11 +1805,14 @@ const CharacterManagerPWA = () => {
                   })}
                 >
                   <option value="">Select Recipe</option>
-                  {RECIPE_LIST.map(recipe => (
-                    <option key={recipe.id} value={recipe.id}>
-                      #{recipe.id} {recipe.name} (Cost: {recipe.staminaCost})
-                    </option>
-                  ))}
+                  {RECIPE_LIST.map(recipe => {
+                    const reqs = recipe.inputIndices.map((id, idx) => `${recipe.inputAmounts[idx]}x ${getItemName(id)}`).join(', ');
+                    return (
+                      <option key={recipe.id} value={recipe.id}>
+                        #{recipe.id} {recipe.name} (Cost: {recipe.staminaCost}) - Req: {reqs}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 

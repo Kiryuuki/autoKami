@@ -15,7 +15,7 @@ import { loadAbi, loadIds } from '../utils/contractLoader.js';
 import supabase from './supabaseService.js';
 import { RECIPE_LIST } from '../utils/recipes.js';
 import { getKamiById } from './kamiService.js';
-import { getAccountById, moveAccount } from './accountService.js';
+import { getAccountById, moveAccount, getAccountInventory } from './accountService.js';
 
 const POLL_INTERVAL_MS = 60000; // Check every 60 seconds
 
@@ -71,15 +71,46 @@ export async function processCraftingAutomation() {
             const elapsedMinutes = (now.getTime() - lastRun.getTime()) / 60000;
 
             if (elapsedMinutes >= setting.interval_minutes) {
-                // Check Stamina
-                const stamina = await getAccountStamina(wallet.account_id);
-                
-                // Calculate required stamina
+                // 1. Get Recipe
                 const recipe = RECIPE_LIST.find(r => r.id === setting.recipe_id);
                 if (!recipe) {
                     console.error(`[Crafting] Recipe #${setting.recipe_id} not found.`);
                     continue;
                 }
+
+                // 2. Check Inventory
+                const inventory = await getAccountInventory(wallet.account_id);
+                const missingItems: { id: number, required: number, current: number }[] = [];
+                
+                for (let i = 0; i < recipe.inputIndices.length; i++) {
+                    const inputId = recipe.inputIndices[i];
+                    const inputAmount = recipe.inputAmounts[i] * setting.amount_to_craft;
+                    const currentAmount = inventory[inputId] || 0;
+                    
+                    if (currentAmount < inputAmount) {
+                         missingItems.push({ id: inputId, required: inputAmount, current: currentAmount });
+                    }
+                }
+                
+                if (missingItems.length > 0) {
+                     const missingStr = missingItems.map(m => `Item #${m.id} (${m.current}/${m.required})`).join(', ');
+                     console.log(`[Crafting] Wallet ${wallet.name}: Missing items for ${recipe.name}: ${missingStr}. Waiting...`);
+                     
+                     await logSystemEvent({
+                        user_id: wallet.user_id,
+                        action: 'auto_craft_skip',
+                        status: 'warning',
+                        message: `Insufficient Items for ${recipe.name}: ${missingStr}. Skipping and waiting ${setting.interval_minutes} mins.`,
+                        metadata: { missing: missingItems, recipe: recipe.name }
+                    });
+                    
+                    // Update timer to wait for next interval
+                    await updateCraftingLastRun(setting.id!);
+                    continue; 
+                }
+
+                // 3. Check Stamina
+                const stamina = await getAccountStamina(wallet.account_id);
                 const requiredStamina = recipe.staminaCost * setting.amount_to_craft;
 
                 if (stamina >= requiredStamina) {

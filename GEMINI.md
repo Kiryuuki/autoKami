@@ -1400,3 +1400,43 @@ const tx = await wallet.sendTransaction({
     nonce: nonce
 });
 ```
+
+### 5. Account Inventory Retrieval
+
+**Location**: `app/src/services/accountService.ts`
+
+Kamigotchi uses a complex inventory system with multiple storage patterns. The `getAccountInventory` function handles all known variations.
+
+**Core Logic**:
+1.  **Entity-Based Inventory (New Standard)**:
+    *   Accounts own "Inventory Entities" via `IDOwnsInventoryComponent` (`OwnsInvID`).
+    *   Each Entity represents a stack of items.
+    *   `IndexItemComponent` maps Entity -> Item ID.
+    *   `ValueComponent` maps Entity -> Amount.
+    *   **Retrieval**: Call `OwnsInv.getEntitiesWithValue(accountId)`, then iterate to fetch Item ID and Amount for each entity.
+
+2.  **Legacy Storage (Fallback)**:
+    *   Some accounts use `KeysComponent` or `SlotsComponent` directly mapped to the Account ID (or hashed ID).
+    *   **Keys**: Stores list of Item IDs (`uint32[]`).
+    *   **Values**: Stores corresponding amounts (`uint256[]`).
+    *   **Retrieval**: Check `Keys.get(accountId)` and `Slots.get(accountId)`. Also check `keccak256("inventory", accountId)`.
+
+**Implementation Example**:
+```typescript
+// Load Components
+const OwnsInv = new ethers.Contract(ownsInvAddr, ["function getEntitiesWithValue(uint256) view returns (uint256[])"], provider);
+const ItemIndex = new ethers.Contract(itemIndexAddr, ["function get(uint256) view returns (uint32)", "function has(uint256) view returns (bool)"], provider);
+const Value = new ethers.Contract(valueAddr, ["function get(uint256) view returns (uint256)"], provider);
+
+// 1. Fetch Entities
+const invEntities = await OwnsInv.getEntitiesWithValue(accountId);
+
+// 2. Iterate & Map
+for (const entityId of invEntities) {
+    if (await ItemIndex.has(entityId)) {
+        const itemId = await ItemIndex.get(entityId);
+        const amount = await Value.get(entityId);
+        inventory[itemId] = (inventory[itemId] || 0) + amount;
+    }
+}
+```
