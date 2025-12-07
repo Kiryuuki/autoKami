@@ -113,11 +113,22 @@ export async function stopHarvestByKamiId(kamiId: string, privateKey: string): P
         console.log(`[Harvest] 🔍 Looking up Kami Profile and active Harvest ID...`);
 
         // Lookup HarvestID from system_logs
-        // 1. Get profile ID
+        // 1. Get Kamigotchi UUID first
+        const { data: kami, error: kamiError } = await supabase
+            .from('kamigotchis')
+            .select('id')
+            .eq('kami_entity_id', kamiId)
+            .single();
+            
+        if (kamiError || !kami) {
+             throw new Error(`Kamigotchi not found for entity ${kamiId}`);
+        }
+
+        // 2. Get Profile ID using Kamigotchi UUID
         const { data: profile, error: profileError } = await supabase
             .from('kami_profiles')
             .select('id')
-            .eq('kami_entity_id', kamiId)
+            .eq('kamigotchi_id', kami.id)
             .single();
 
         if (profileError || !profile) {

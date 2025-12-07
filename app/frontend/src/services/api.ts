@@ -178,6 +178,8 @@ export interface AutomationSettings {
   craftingRecipeId?: number | null;
   craftingAmount?: number;
   craftingInterval?: number;
+  lastHarvestStart?: string | null;
+  lastCollect?: string | null;
 }
 
 export interface KamigotchiData {

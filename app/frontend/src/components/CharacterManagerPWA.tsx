@@ -197,6 +197,66 @@ const CharacterCard = memo(({
 
 CharacterCard.displayName = 'CharacterCard';
 
+// Status Timer Component
+const StatusTimer = ({ char }: { char: Kami }) => {
+  const [timeLeft, setTimeLeft] = useState<string>('');
+  const [label, setLabel] = useState<string>('');
+
+  useEffect(() => {
+    const updateTimer = () => {
+      const now = Date.now();
+      let targetTime = 0;
+      let currentLabel = '';
+
+      if (char.running && char.automation?.lastHarvestStart) {
+        // Harvesting
+        const duration = char.automation.harvestDuration || 60;
+        targetTime = new Date(char.automation.lastHarvestStart).getTime() + (duration * 60 * 1000);
+        currentLabel = 'Harvesting';
+      } else if (!char.running && char.automation?.lastCollect) {
+        // Resting
+        const duration = char.automation.restDuration || 30;
+        targetTime = new Date(char.automation.lastCollect).getTime() + (duration * 60 * 1000);
+        currentLabel = 'Resting';
+      } else {
+        setLabel(char.running ? 'Harvesting' : 'Idle');
+        setTimeLeft('');
+        return;
+      }
+
+      const diff = targetTime - now;
+      
+      if (diff > 0) {
+        const minutes = Math.floor(diff / 60000);
+        const seconds = Math.floor((diff % 60000) / 1000);
+        setTimeLeft(`${minutes}m ${seconds}s`);
+        setLabel(currentLabel);
+      } else {
+        setTimeLeft('Ready');
+        setLabel(currentLabel);
+      }
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [char]);
+
+  return (
+    <div className="text-center">
+      <div className="font-bold mb-1">Status</div>
+      <div className={`font-bold ${char.running ? 'text-green-500' : 'text-gray-500'}`}>
+        {char.running ? '● RUNNING' : '○ STOPPED'}
+      </div>
+      {timeLeft && (
+        <div className="text-xs font-mono mt-1 text-gray-600 bg-gray-100 rounded px-2 py-1 inline-block border border-gray-300">
+          {label}: {timeLeft}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Memoized Character Details Component
 const CharacterDetails = memo(({ char, theme }: { 
   char: Kami; 
@@ -253,15 +313,12 @@ const CharacterDetails = memo(({ char, theme }: {
       <StatRow icon={HarmonyIcon} label="HARMONY" value={char.finalStats.harmony} />
     </div>
 
-          {/* Status indicator */}
-        <div className={`mb-4 p-3 ${theme.card} text-center`}>
-          <div className="font-bold mb-1">Status</div>
-          <div className={`font-bold ${char.running ? 'text-green-500' : 'text-gray-500'}`}>
-            {char.running ? '● RUNNING' : '○ STOPPED'}
-          </div>
-        </div>
-      </>
-    ));
+    {/* Status indicator */}
+    <div className={`mb-4 p-3 ${theme.card}`}>
+      <StatusTimer char={char} />
+    </div>
+  </>
+));
 CharacterDetails.displayName = 'CharacterDetails';
 
 // Stat row component
@@ -506,18 +563,18 @@ const CharacterManagerPWA = () => {
   const handleRefresh = useCallback(async () => {
     if (!user?.id) return;
     
-    const currentProfile = profiles[currentProfileIndex];
-    if (!currentProfile || currentProfile.id === 'default') {
-      addLog('Cannot refresh default profile. Please add an Operator Wallet.', 'warning');
-      return;
-    }
-
     setIsRefreshing(true);
-    addLog(`Refreshing Kamigotchis for ${currentProfile.name}...`, 'info');
+    addLog(`Syncing all Kamigotchis from blockchain...`, 'info');
+    
     try {
-      const result = await refreshKamigotchis(user.id, currentProfile.id);
+      // Refresh ALL profiles for this user to ensure total state consistency
+      const result = await refreshKamigotchis(user.id);
+      
       if (result.success) {
-        addLog(`Refresh complete. Synced ${result.synced} Kamigotchis.`, 'success');
+        addLog(`Sync complete. Updated ${result.synced} Kamigotchis.`, 'success');
+        if (result.errors && result.errors.length > 0) {
+             result.errors.forEach((e: string) => addLog(`Sync warning: ${e}`, 'warning'));
+        }
         setRefreshKey(prev => prev + 1);
       } else {
         addLog('Refresh failed. Check backend logs.', 'error');
@@ -528,7 +585,7 @@ const CharacterManagerPWA = () => {
     } finally {
       setIsRefreshing(false);
     }
-  }, [user?.id, profiles, currentProfileIndex, addLog]);
+  }, [user?.id, addLog]);
 
   // Toggle automation on/off
   const toggleAutomation = useCallback(async (charId: string) => {

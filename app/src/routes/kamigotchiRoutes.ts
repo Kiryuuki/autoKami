@@ -169,7 +169,9 @@ router.get('/', async (req: Request, res: Response) => {
                             autoCraftEnabled: crafting?.is_enabled || false,
                             craftingRecipeId: crafting?.recipe_id || null,
                             craftingAmount: crafting?.amount_to_craft || 1,
-                            craftingInterval: crafting?.interval_minutes || 60
+                            craftingInterval: crafting?.interval_minutes || 60,
+                            lastHarvestStart: profile.last_harvest_start,
+                            lastCollect: profile.last_collect
                         },
                         lastSynced: kami.last_synced
                     };
