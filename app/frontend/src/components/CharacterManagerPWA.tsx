@@ -257,6 +257,43 @@ const StatusTimer = ({ char }: { char: Kami }) => {
   );
 };
 
+// Running Timer Component
+const RunningTimer = ({ startTime }: { startTime: string | null | undefined }) => {
+  const [duration, setDuration] = useState<string>('0m');
+
+  useEffect(() => {
+    if (!startTime) {
+      setDuration('0m');
+      return;
+    }
+
+    const updateTimer = () => {
+      const now = Date.now();
+      const start = new Date(startTime).getTime();
+      const diff = now - start;
+      
+      if (diff > 0) {
+        const hours = Math.floor(diff / 3600000);
+        const minutes = Math.floor((diff % 3600000) / 60000);
+        
+        if (hours > 0) {
+             setDuration(`${hours}h ${minutes}m`);
+        } else {
+             setDuration(`${minutes}m`);
+        }
+      } else {
+        setDuration('0m');
+      }
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 60000);
+    return () => clearInterval(interval);
+  }, [startTime]);
+
+  return <span>{duration}</span>;
+};
+
 // Memoized Character Details Component
 const CharacterDetails = memo(({ char, theme }: { 
   char: Kami; 
@@ -316,6 +353,25 @@ const CharacterDetails = memo(({ char, theme }: {
     {/* Status indicator */}
     <div className={`mb-4 p-3 ${theme.card}`}>
       <StatusTimer char={char} />
+    </div>
+
+    {/* Automation Stats */}
+    <div className={`${theme.card} p-3 mb-4 space-y-2`}>
+        <div className="font-bold border-b border-gray-200 pb-1 mb-1">SESSION STATS</div>
+        <div className="flex justify-between items-center text-sm">
+            <span>Total Harvests:</span>
+            <span className="font-bold">{char.automation?.totalHarvests || 0}</span>
+        </div>
+        <div className="flex justify-between items-center text-sm">
+            <span>Total Rests:</span>
+            <span className="font-bold">{char.automation?.totalRests || 0}</span>
+        </div>
+        <div className="flex justify-between items-center text-sm">
+            <span>Running for:</span>
+            <span className="font-bold">
+                 <RunningTimer startTime={char.automation?.automationStartedAt} />
+            </span>
+        </div>
     </div>
   </>
 ));

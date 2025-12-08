@@ -286,7 +286,8 @@ async function checkKami(profile: any) {
                 if (result.success) {
                     await updateKamiProfile(profile.kamigotchi_id, {
                         is_currently_harvesting: false,
-                        last_collect: now.toISOString()
+                        last_collect: now.toISOString(),
+                        total_rests: (profile.total_rests || 0) + 1
                     });
                     await logSystemEvent({
                         user_id: userId,
@@ -328,7 +329,8 @@ async function checkKami(profile: any) {
                     if (result.success) {
                         await updateKamiProfile(profile.kamigotchi_id, {
                             is_currently_harvesting: false,
-                            last_collect: now.toISOString()
+                            last_collect: now.toISOString(),
+                            total_rests: (profile.total_rests || 0) + 1
                         });
                         await logSystemEvent({
                             user_id: userId,
@@ -433,7 +435,8 @@ async function checkKami(profile: any) {
                     if (result.success) {
                         await updateKamiProfile(profile.kamigotchi_id, {
                             is_currently_harvesting: true,
-                            last_harvest_start: now.toISOString()
+                            last_harvest_start: now.toISOString(),
+                            total_harvests: (profile.total_harvests || 0) + 1
                         });
                         await logSystemEvent({
                             user_id: userId,
