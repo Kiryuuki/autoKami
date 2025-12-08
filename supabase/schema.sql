@@ -86,6 +86,11 @@ CREATE TABLE kami_profiles (
   last_collect TIMESTAMP WITH TIME ZONE,
   is_currently_harvesting BOOLEAN DEFAULT false,
 
+  -- Statistics
+  total_harvests INTEGER DEFAULT 0,
+  total_rests INTEGER DEFAULT 0,
+  automation_started_at TIMESTAMP WITH TIME ZONE,
+
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE(kamigotchi_id)

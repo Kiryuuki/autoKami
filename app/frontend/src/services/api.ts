@@ -180,6 +180,9 @@ export interface AutomationSettings {
   craftingInterval?: number;
   lastHarvestStart?: string | null;
   lastCollect?: string | null;
+  totalHarvests?: number;
+  totalRests?: number;
+  automationStartedAt?: string | null;
 }
 
 export interface KamigotchiData {

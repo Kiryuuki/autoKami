@@ -412,6 +412,9 @@ export interface KamiProfile {
   last_harvest_start: string | null;
   last_collect: string | null;
   is_currently_harvesting: boolean;
+  total_harvests: number;
+  total_rests: number;
+  automation_started_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -441,7 +444,10 @@ export async function getOrCreateKamiProfile(kamigotchiId: string, operatorWalle
       harvest_schedule_type: 'continuous',
       harvest_duration: 60,
       rest_duration: 30,
-      is_currently_harvesting: false
+      is_currently_harvesting: false,
+      total_harvests: 0,
+      total_rests: 0,
+      automation_started_at: null
     })
     .select()
     .single();
@@ -480,6 +486,9 @@ export async function updateKamiProfile(kamigotchiId: string, updates: Partial<K
       harvest_duration: 60,
       rest_duration: 30,
       is_currently_harvesting: false,
+      total_harvests: 0,
+      total_rests: 0,
+      automation_started_at: null,
       ...updates // Apply the updates to the new profile
     })
     .select()

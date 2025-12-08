@@ -171,7 +171,11 @@ router.get('/', async (req: Request, res: Response) => {
                             craftingAmount: crafting?.amount_to_craft || 1,
                             craftingInterval: crafting?.interval_minutes || 60,
                             lastHarvestStart: profile.last_harvest_start,
-                            lastCollect: profile.last_collect
+                            lastCollect: profile.last_collect,
+                            // Stats
+                            totalHarvests: profile.total_harvests || 0,
+                            totalRests: profile.total_rests || 0,
+                            automationStartedAt: profile.automation_started_at
                         },
                         lastSynced: kami.last_synced
                     };
@@ -247,6 +251,19 @@ router.patch('/:id/automation', async (req: Request, res: Response) => {
         // Update profile if there are harvest settings
         let profile;
         if (Object.keys(dbUpdates).length > 0) {
+            // Handle automation_started_at logic
+            if (dbUpdates.auto_harvest_enabled !== undefined) {
+                 const kami = await getKamigotchiById(id);
+                 if (kami) {
+                     const existingProfile = await getOrCreateKamiProfile(id, kami.operator_wallet_id);
+                     if (dbUpdates.auto_harvest_enabled === true && !existingProfile.auto_harvest_enabled) {
+                         dbUpdates.automation_started_at = new Date().toISOString();
+                     } else if (dbUpdates.auto_harvest_enabled === false) {
+                         dbUpdates.automation_started_at = null;
+                     }
+                 }
+            }
+
             profile = await updateKamiProfile(id, dbUpdates);
         } else {
             // Fetch existing profile to return consistent response
@@ -367,11 +384,19 @@ router.post('/:id/harvest/start', async (req: Request, res: Response) => {
 
         if (result.success) {
             // Update profile
-            await updateKamiProfile(kami.id, {
+            const updates: any = {
                 is_currently_harvesting: true,
                 last_harvest_start: new Date().toISOString(),
-                auto_harvest_enabled: true // Enable automation when started manually via UI
-            });
+                auto_harvest_enabled: true, // Enable automation when started manually via UI
+                total_harvests: (profile.total_harvests || 0) + 1
+            };
+            
+            // Set start time if not already running
+            if (!profile.auto_harvest_enabled) {
+                updates.automation_started_at = new Date().toISOString();
+            }
+
+            await updateKamiProfile(kami.id, updates);
 
             await logSystemEvent({
                 user_id: kami.user_id,
@@ -447,7 +472,9 @@ router.post('/:id/harvest/stop', async (req: Request, res: Response) => {
             // Update profile
             await updateKamiProfile(kami.id, {
                 is_currently_harvesting: false,
-                auto_harvest_enabled: false // Disable automation when stopped manually via UI
+                auto_harvest_enabled: false, // Disable automation when stopped manually via UI
+                total_rests: (profile.total_rests || 0) + 1,
+                automation_started_at: null
             });
 
             await logSystemEvent({
@@ -512,10 +539,24 @@ router.post('/:id/harvest/auto', async (req: Request, res: Response) => {
             });
         }
 
-        // Update automation profile
-        const profile = await updateKamiProfile(id, {
+        const updates: any = {
             auto_harvest_enabled: enabled
-        });
+        };
+
+        if (enabled) {
+             const kami = await getKamigotchiById(id);
+             if (kami) {
+                 const existingProfile = await getOrCreateKamiProfile(id, kami.operator_wallet_id);
+                 if (!existingProfile.auto_harvest_enabled) {
+                     updates.automation_started_at = new Date().toISOString();
+                 }
+             }
+        } else {
+             updates.automation_started_at = null;
+        }
+
+        // Update automation profile
+        const profile = await updateKamiProfile(id, updates);
 
         // Fetch kamigotchi to get kami_index and user_id for logging
         const kami = await getKamigotchiById(id);
