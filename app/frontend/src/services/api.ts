@@ -183,6 +183,11 @@ export interface AutomationSettings {
   totalHarvests?: number;
   totalRests?: number;
   automationStartedAt?: string | null;
+  strategyType?: 'harvest_rest' | 'harvest_feed';
+  feedItemId?: number | null;
+  feedItemId2?: number | null;
+  feedTriggerValue?: number;
+  feedIntervalMinutes?: number;
 }
 
 export interface KamigotchiData {

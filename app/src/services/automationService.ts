@@ -11,9 +11,11 @@ import {
 } from './supabaseService.js';
 import { startHarvest, stopHarvestByKamiId, getKamiState } from './harvestService.js';
 import { craftRecipe } from './craftingService.js';
+import { feedKami } from './feedService.js';
 import { loadAbi, loadIds } from '../utils/contractLoader.js';
 import supabase from './supabaseService.js';
 import { RECIPE_LIST } from '../utils/recipes.js';
+import { getItemName } from '../utils/itemMapping.js';
 import { getKamiById } from './kamiService.js';
 import { getAccountById, moveAccount, getAccountInventory } from './accountService.js';
 
@@ -206,7 +208,7 @@ async function processAutomation() {
         // 1. Fetch all enabled automation profiles
         const { data: profiles, error } = await supabase
             .from('kami_profiles')
-            .select('*, kamigotchis!inner(kami_entity_id, encrypted_private_key, user_id, kami_index, kami_name)')
+            .select('*, kamigotchis!inner(kami_entity_id, encrypted_private_key, user_id, kami_index, kami_name, account_id)')
             .eq('auto_harvest_enabled', true);
 
         if (error) throw error;
@@ -237,6 +239,7 @@ async function checkKami(profile: any) {
     const kami = profile.kamigotchis; // Joined data
     const kamiId = kami.kami_entity_id;
     const userId = kami.user_id;
+    const strategy = profile.strategy_type || 'harvest_rest';
 
     try {
         // Check on-chain status
@@ -261,6 +264,142 @@ async function checkKami(profile: any) {
 
         if (isHarvesting) {
             // --- HARVESTING STATE ---
+
+            // NEW: Harvest & Feed Strategy
+            if (strategy === 'harvest_feed') {
+                const intervalMinutes = profile.feed_interval_minutes || 0;
+                
+                if (intervalMinutes > 0) {
+                    const lastFeed = profile.last_feed_at ? new Date(profile.last_feed_at) : new Date(0);
+                    const elapsedMinutes = (now.getTime() - lastFeed.getTime()) / 60000;
+                    
+                    if (elapsedMinutes >= intervalMinutes) {
+                        console.log(`[Automation] Kami #${kami.kami_index}: Feed Interval Reached (${Math.floor(elapsedMinutes)}m >= ${intervalMinutes}m). Preparing to feed...`);
+                        
+                        // 1. Identify Items (Primary & Fallback)
+                        // Currently UI only supports primary 'feed_item_id'.
+                        // Future: Add 'feed_item_id_2' to profile for fallback.
+                        const feedItems = [];
+                        if (profile.feed_item_id) feedItems.push(profile.feed_item_id);
+                        if (profile.feed_item_id_2) feedItems.push(profile.feed_item_id_2);
+
+                        if (feedItems.length === 0) {
+                            console.warn(`[Automation] Kami #${kami.kami_index}: Strategy is 'harvest_feed' but no feed items configured.`);
+                            return;
+                        }
+
+                        // 2. Fetch Inventory
+                        let inventory = await getAccountInventory(kami.account_id);
+                        let fedSuccessfully = false;
+
+                        // 3. Attempt Feed with Items in priority
+                        for (const itemId of feedItems) {
+                            if (fedSuccessfully) break;
+
+                            const foodCount = inventory[itemId] || 0;
+                            const itemName = getItemName(itemId);
+
+                            if (foodCount > 0) {
+                                console.log(`[Automation] Kami #${kami.kami_index}: Found ${foodCount}x ${itemName} (Item #${itemId}). Attempting to feed...`);
+                                
+                                const privateKey = await decryptPrivateKey(kami.encrypted_private_key);
+                                let retryCount = 0;
+                                const maxRetries = 2;
+
+                                while (retryCount <= maxRetries && !fedSuccessfully) {
+                                    if (retryCount > 0) console.log(`[Automation] Kami #${kami.kami_index}: Retry attempt ${retryCount}/${maxRetries}...`);
+
+                                    const result = await feedKami(
+                                        kamiId, 
+                                        itemId, 
+                                        privateKey,
+                                        userId,
+                                        kami.kami_index,
+                                        profile.id
+                                    );
+
+                                    if (result.success) {
+                                        fedSuccessfully = true;
+                                        const feedTime = new Date().toISOString();
+
+                                        // 4. Update Profile
+                                        await updateKamiProfile(profile.kamigotchi_id, {
+                                            last_feed_at: feedTime
+                                        });
+
+                                        // 5. Post-Feed Check
+                                        // Wait a moment for indexer? Or just check optimistic/account state?
+                                        // Account inventory might verify decrement.
+                                        // For now, re-fetch inventory to check supply for *next* time.
+                                        inventory = await getAccountInventory(kami.account_id);
+                                        const newCount = inventory[itemId] || 0;
+                                        
+                                        let msg = `Kami fed successfully with ${itemName}. Remaining: ${newCount}.`;
+                                        let status: 'success' | 'warning' = 'success';
+
+                                        if (newCount === 0) {
+                                            msg += ` ⚠️ WARNING: 0 ${itemName} remaining! Refill required.`;
+                                            status = 'warning';
+                                        }
+
+                                        await logSystemEvent({
+                                            user_id: userId,
+                                            kami_index: kami.kami_index,
+                                            kami_profile_id: profile.id,
+                                            action: 'auto_feed_success',
+                                            status: status,
+                                            message: msg,
+                                            metadata: { txHash: result.txHash, itemId, remaining: newCount }
+                                        });
+
+                                    } else {
+                                        retryCount++;
+                                        console.error(`[Automation] Kami #${kami.kami_index}: Feed failed (${result.error}).`);
+                                        
+                                        if (retryCount <= maxRetries) {
+                                            await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5s before retry
+                                        }
+                                    }
+                                }
+                            } else {
+                                console.log(`[Automation] Kami #${kami.kami_index}: Out of ${itemName} (Item #${itemId}). Skipping.`);
+                            }
+                        }
+
+                        // 6. Final Failure Handling
+                        if (!fedSuccessfully) {
+                            console.error(`[Automation] Kami #${kami.kami_index}: Failed to feed after checking all items/retries.`);
+                            
+                            // Stop Harvesting
+                            const privateKey = await decryptPrivateKey(kami.encrypted_private_key);
+                            const stopResult = await stopHarvestByKamiId(kamiId, privateKey);
+                            
+                            // Log Critical Alert
+                            await updateKamiProfile(profile.kamigotchi_id, {
+                                is_currently_harvesting: false,
+                                auto_harvest_enabled: false, // Disable to prevent restart loop
+                                last_collect: now.toISOString()
+                            });
+
+                            const primaryItemName = getItemName(profile.feed_item_id);
+                            
+                            await logSystemEvent({
+                                user_id: userId,
+                                kami_index: kami.kami_index,
+                                kami_profile_id: profile.id,
+                                action: 'auto_feed_critical_stop',
+                                status: 'error',
+                                message: `CRITICAL: Could not feed Kami (Out of ${primaryItemName} or Tx Failed). Harvesting STOPPED to prevent death.`,
+                                metadata: { txHash: stopResult.success ? stopResult.txHash : undefined, error: stopResult.error }
+                            });
+                            
+                            return; // Stop processing
+                        }
+                        
+                        return; // Done with this cycle if fed
+                    }
+                }
+            }
             
             // A. Health Check (Emergency Stop)
             const minHealth = profile.min_health_threshold || 20; // Default 20 HP
@@ -305,44 +444,46 @@ async function checkKami(profile: any) {
             }
 
             // B. Duration Check
-            const lastStart = profile.last_harvest_start ? new Date(profile.last_harvest_start) : new Date();
-            const harvestDurationMs = (profile.harvest_duration || 60) * 60 * 1000;
-            const elapsed = now.getTime() - lastStart.getTime();
+            if (strategy !== 'harvest_feed') {
+                const lastStart = profile.last_harvest_start ? new Date(profile.last_harvest_start) : new Date();
+                const harvestDurationMs = (profile.harvest_duration || 60) * 60 * 1000;
+                const elapsed = now.getTime() - lastStart.getTime();
 
-            if (elapsed >= harvestDurationMs) {
-                // Time to stop?
-                if (profile.auto_collect_enabled) {
-                    console.log(`[Automation] Kami #${kami.kami_index}: Harvest time exceeded (${Math.floor(elapsed/60000)}m). Stopping...`);
-                    
-                    await logSystemEvent({
-                        user_id: userId,
-                        kami_index: kami.kami_index,
-                        kami_profile_id: profile.id,
-                        action: 'auto_stop',
-                        status: 'info',
-                        message: `[Kami #${kami.kami_index} (${kami.kami_name || 'Unknown'})] Harvest time exceeded (${Math.floor(elapsed/60000)}m / ${profile.harvest_duration}m). Stopping harvest (Node #${profile.harvest_node_index ?? '?'}).`
-                    });
-
-                    const privateKey = await decryptPrivateKey(kami.encrypted_private_key);
-                    const result = await stopHarvestByKamiId(kamiId, privateKey);
-
-                    if (result.success) {
-                        await updateKamiProfile(profile.kamigotchi_id, {
-                            is_currently_harvesting: false,
-                            last_collect: now.toISOString(),
-                            total_rests: (profile.total_rests || 0) + 1
-                        });
+                if (elapsed >= harvestDurationMs) {
+                    // Time to stop?
+                    if (profile.auto_collect_enabled) {
+                        console.log(`[Automation] Kami #${kami.kami_index}: Harvest time exceeded (${Math.floor(elapsed/60000)}m). Stopping...`);
+                        
                         await logSystemEvent({
                             user_id: userId,
                             kami_index: kami.kami_index,
                             kami_profile_id: profile.id,
                             action: 'auto_stop',
-                            status: 'success',
-                            message: `Harvest stopped successfully (Node #${profile.harvest_node_index ?? '?'}). Entering rest mode.`,
-                            metadata: { txHash: result.txHash }
+                            status: 'info',
+                            message: `[Kami #${kami.kami_index} (${kami.kami_name || 'Unknown'})] Harvest time exceeded (${Math.floor(elapsed/60000)}m / ${profile.harvest_duration}m). Stopping harvest (Node #${profile.harvest_node_index ?? '?'}).`
                         });
-                    } else {
-                        throw new Error(result.error);
+
+                        const privateKey = await decryptPrivateKey(kami.encrypted_private_key);
+                        const result = await stopHarvestByKamiId(kamiId, privateKey);
+
+                        if (result.success) {
+                            await updateKamiProfile(profile.kamigotchi_id, {
+                                is_currently_harvesting: false,
+                                last_collect: now.toISOString(),
+                                total_rests: (profile.total_rests || 0) + 1
+                            });
+                            await logSystemEvent({
+                                user_id: userId,
+                                kami_index: kami.kami_index,
+                                kami_profile_id: profile.id,
+                                action: 'auto_stop',
+                                status: 'success',
+                                message: `Harvest stopped successfully (Node #${profile.harvest_node_index ?? '?'}). Entering rest mode.`,
+                                metadata: { txHash: result.txHash }
+                            });
+                        } else {
+                            throw new Error(result.error);
+                        }
                     }
                 }
             }

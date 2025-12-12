@@ -60,6 +60,7 @@ router.post('/refresh', async (req: Request, res: Response) => {
                 const privateKey = await decryptPrivateKey(wallet.encrypted_private_key);
 
                 for (const kami of kamis) {
+                    console.log(`[Refresh] Upserting Kami #${kami.index} (Name: ${kami.name})`);
                     await upsertKamigotchi({
                         userId: user.id,
                         operatorWalletId: wallet.id,
@@ -175,7 +176,12 @@ router.get('/', async (req: Request, res: Response) => {
                             // Stats
                             totalHarvests: profile.total_harvests || 0,
                             totalRests: profile.total_rests || 0,
-                            automationStartedAt: profile.automation_started_at
+                            automationStartedAt: profile.automation_started_at,
+                            strategyType: profile.strategy_type || 'harvest_rest',
+                            feedItemId: profile.feed_item_id,
+                            feedItemId2: profile.feed_item_id_2,
+                            feedTriggerValue: profile.feed_trigger_value,
+                            feedIntervalMinutes: profile.feed_interval_minutes
                         },
                         lastSynced: kami.last_synced
                     };
@@ -247,6 +253,11 @@ router.patch('/:id/automation', async (req: Request, res: Response) => {
         if (updates.minHealthThreshold !== undefined) dbUpdates.min_health_threshold = updates.minHealthThreshold;
         if (updates.harvestDuration !== undefined) dbUpdates.harvest_duration = updates.harvestDuration;
         if (updates.restDuration !== undefined) dbUpdates.rest_duration = updates.restDuration;
+        if (updates.strategyType !== undefined) dbUpdates.strategy_type = updates.strategyType;
+        if (updates.feedItemId !== undefined) dbUpdates.feed_item_id = updates.feedItemId;
+        if (updates.feedItemId2 !== undefined) dbUpdates.feed_item_id_2 = updates.feedItemId2;
+        if (updates.feedTriggerValue !== undefined) dbUpdates.feed_trigger_value = updates.feedTriggerValue;
+        if (updates.feedIntervalMinutes !== undefined) dbUpdates.feed_interval_minutes = updates.feedIntervalMinutes;
 
         // Update profile if there are harvest settings
         let profile;
@@ -289,6 +300,11 @@ router.patch('/:id/automation', async (req: Request, res: Response) => {
                 minHealthThreshold: profile.min_health_threshold,
                 harvestDuration: profile.harvest_duration,
                 restDuration: profile.rest_duration,
+                strategyType: profile.strategy_type || 'harvest_rest',
+                feedItemId: profile.feed_item_id,
+                feedItemId2: profile.feed_item_id_2,
+                feedTriggerValue: profile.feed_trigger_value,
+                feedIntervalMinutes: profile.feed_interval_minutes,
                 // Crafting
                 autoCraftEnabled: crafting?.is_enabled || false,
                 craftingRecipeId: crafting?.recipe_id || null,

@@ -46,6 +46,19 @@ const affinityIcons: Record<string, string> = {
   'scrap': 'https://app.kamigotchi.io/assets/scrap-Dk1BqVaa.png',
 };
 
+// Healing items for Harvest & Feed strategy
+const HEALING_ITEMS = [
+  { id: 11311, name: "Resin" },
+  { id: 11312, name: "Honeydew Scale" },
+  { id: 11313, name: "Golden Apple" },
+  { id: 11314, name: "Blue Pansy" },
+  { id: 11304, name: "Gakki Cookie Sticks" },
+  { id: 11227, name: "Fetid Egg" },
+  { id: 11301, name: "Maple-Flavor Ghost Gum" },
+  { id: 11302, name: "Cheeseburger" },
+  { id: 11303, name: "Pom-Pom Fruit Candy" }
+];
+
 // Theme configurations
 const THEMES = {
   arcade: {
@@ -716,7 +729,7 @@ const CharacterManagerPWA = () => {
     };
 
     fetchData();
-  }, [authenticated, user, profiles, currentProfileIndex, refreshKey, selectedChar]);
+  }, [authenticated, user, profiles, currentProfileIndex, refreshKey]);
 
   // Real-time Log Subscription
   useEffect(() => {
@@ -849,6 +862,21 @@ const CharacterManagerPWA = () => {
           } else {
              // RESTING -> Start Harvest (Robust Action)
              addLog(`"${char.name}" is Resting. Initiating Start Sequence...`, 'info');
+             
+             // --- NEW: Validate Feed Strategy settings before starting ---
+             if (char.automation?.strategyType === 'harvest_feed') {
+                if (!char.automation.feedItemId && !char.automation.feedItemId2) {
+                  alert(`Cannot start Harvest & Feed for "${char.name}". Please configure Primary and/or Fallback Feed Item in Automation Settings.`);
+                  setProcessingKamiIds(prev => prev.filter(id => id !== charId));
+                  return;
+                }
+                if (!char.automation.feedIntervalMinutes || char.automation.feedIntervalMinutes <= 0) {
+                  alert(`Cannot start Harvest & Feed for "${char.name}". Please configure a valid Feed Interval (minutes) in Automation Settings.`);
+                  setProcessingKamiIds(prev => prev.filter(id => id !== charId));
+                  return;
+                }
+             }
+             // --- END NEW VALIDATION ---
              
              // 1. Call Start Harvest (Triggers TX + Enables Automation)
              const result = await startHarvestKamigotchi(char.id);
@@ -1961,6 +1989,27 @@ const CharacterManagerPWA = () => {
 
             {/* Body */}
             <div className="p-6 space-y-6">
+              {/* Strategy Selection */}
+              <div>
+                <label className="block text-sm font-bold text-yellow-400 mb-2 uppercase">Strategy</label>
+                <select 
+                  className="w-full bg-gray-800 border-2 border-gray-600 rounded p-2 text-white focus:border-yellow-500 outline-none"
+                  value={configKami.automation?.strategyType || 'harvest_rest'}
+                  onChange={(e) => setConfigKami({
+                    ...configKami,
+                    automation: { ...configKami.automation, strategyType: e.target.value as any }
+                  })}
+                >
+                  <option value="harvest_rest">Harvest & Rest (Timer)</option>
+                  <option value="harvest_feed">Harvest & Feed (Item)</option>
+                </select>
+                <div className="text-xs text-gray-500 mt-1">
+                  {configKami.automation?.strategyType === 'harvest_feed' 
+                    ? 'Harvest continuously and consume items to recover HP.' 
+                    : 'Harvest for a duration, then rest to recover HP.'}
+                </div>
+              </div>
+
               {/* Node Selection */}
               <div>
                 <label className="block text-sm font-bold text-green-400 mb-2 uppercase">Harvest Node</label>
@@ -1984,35 +2033,103 @@ const CharacterManagerPWA = () => {
                 <div className="text-xs text-gray-500 mt-1">Select target node for harvesting</div>
               </div>
 
-              {/* Durations */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold text-blue-400 mb-2 uppercase">Harvest Duration</label>
-                  <input 
-                    type="number" 
-                    className="w-full bg-gray-800 border-2 border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none"
-                    defaultValue={configKami.automation?.harvestDuration || 60}
-                    onChange={(e) => setConfigKami({
-                      ...configKami,
-                      automation: { ...configKami.automation, harvestDuration: parseInt(e.target.value) }
-                    })}
-                  />
-                  <div className="text-xs text-gray-500 mt-1">(MINS)</div>
+              {/* Parameters based on Strategy */}
+              {configKami.automation?.strategyType === 'harvest_feed' ? (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-bold text-pink-400 mb-2 uppercase">Primary Item</label>
+                      <select
+                        className="w-full bg-gray-800 border-2 border-gray-600 rounded p-2 text-white focus:border-pink-500 outline-none"
+                        value={configKami.automation?.feedItemId || ''}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value);
+                          // Prevent selecting same as Item 2
+                          if (val === configKami.automation?.feedItemId2) {
+                            alert("Primary and Secondary items cannot be the same.");
+                            return;
+                          }
+                          setConfigKami({
+                            ...configKami,
+                            automation: { ...configKami.automation, feedItemId: val }
+                          });
+                        }}
+                      >
+                        <option value="">Select Item 1</option>
+                        {HEALING_ITEMS.filter(i => i.id !== configKami.automation?.feedItemId2).map(item => (
+                          <option key={item.id} value={item.id}>{item.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-pink-400/70 mb-2 uppercase">Fallback Item</label>
+                      <select
+                        className="w-full bg-gray-800 border-2 border-gray-600 rounded p-2 text-white focus:border-pink-500/70 outline-none"
+                        value={configKami.automation?.feedItemId2 || ''}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value);
+                          // Prevent selecting same as Item 1
+                          if (val === configKami.automation?.feedItemId) {
+                            alert("Primary and Secondary items cannot be the same.");
+                            return;
+                          }
+                          setConfigKami({
+                            ...configKami,
+                            automation: { ...configKami.automation, feedItemId2: val || null }
+                          });
+                        }}
+                      >
+                        <option value="">Select Item 2 (Optional)</option>
+                        {HEALING_ITEMS.filter(i => i.id !== configKami.automation?.feedItemId).map(item => (
+                          <option key={item.id} value={item.id}>{item.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <label className="block text-sm font-bold text-blue-400 mb-2 uppercase">Feed Interval</label>
+                    <input 
+                      type="number" 
+                      className="w-full bg-gray-800 border-2 border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none"
+                      value={configKami.automation?.feedIntervalMinutes || 60}
+                      onChange={(e) => setConfigKami({
+                        ...configKami,
+                        automation: { ...configKami.automation, feedIntervalMinutes: parseInt(e.target.value) }
+                      })}
+                    />
+                    <div className="text-xs text-gray-500 mt-1">(MINS)</div>
+                  </div>
+                </>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-bold text-blue-400 mb-2 uppercase">Harvest Duration</label>
+                    <input 
+                      type="number" 
+                      className="w-full bg-gray-800 border-2 border-gray-600 rounded p-2 text-white focus:border-blue-500 outline-none"
+                      defaultValue={configKami.automation?.harvestDuration || 60}
+                      onChange={(e) => setConfigKami({
+                        ...configKami,
+                        automation: { ...configKami.automation, harvestDuration: parseInt(e.target.value) }
+                      })}
+                    />
+                    <div className="text-xs text-gray-500 mt-1">(MINS)</div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-purple-400 mb-2 uppercase">Rest Duration</label>
+                    <input 
+                      type="number" 
+                      className="w-full bg-gray-800 border-2 border-gray-600 rounded p-2 text-white focus:border-purple-500 outline-none"
+                      defaultValue={configKami.automation?.restDuration || 30}
+                      onChange={(e) => setConfigKami({
+                        ...configKami,
+                        automation: { ...configKami.automation, restDuration: parseInt(e.target.value) }
+                      })}
+                    />
+                    <div className="text-xs text-gray-500 mt-1">(MINS)</div>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-bold text-purple-400 mb-2 uppercase">Rest Duration</label>
-                  <input 
-                    type="number" 
-                    className="w-full bg-gray-800 border-2 border-gray-600 rounded p-2 text-white focus:border-purple-500 outline-none"
-                    defaultValue={configKami.automation?.restDuration || 30}
-                    onChange={(e) => setConfigKami({
-                      ...configKami,
-                      automation: { ...configKami.automation, restDuration: parseInt(e.target.value) }
-                    })}
-                  />
-                  <div className="text-xs text-gray-500 mt-1">(MINS)</div>
-                </div>
-              </div>
+              )}
 
               {/* Toggles */}
               <div className="space-y-3 pt-2">
@@ -2543,6 +2660,11 @@ const CharacterManagerPWA = () => {
             </div>
           </div>
       )}
+
+      {/* Version Number */}
+      <div className="fixed bottom-1 right-1 text-[10px] font-mono opacity-50 pointer-events-none z-50 text-white mix-blend-difference">
+        v1.01
+      </div>
     </div>
   );
 };
