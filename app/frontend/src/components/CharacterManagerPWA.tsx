@@ -5,7 +5,6 @@ import { usePrivy } from '@privy-io/react-auth';
 import { RECIPE_LIST } from '../assets/recipeList';
 import { 
   refreshKamigotchis, 
-  getProfiles, 
   getKamigotchis, 
   getSystemLogs,
   deleteKamigotchi,
@@ -15,7 +14,6 @@ import {
   type AutomationSettings,
   addProfile,
   updateTelegramSettings,
-  getUserSettings,
   sendTestTelegramMessage,
   getAccountStamina,
   getWatchlist,
@@ -26,11 +24,14 @@ import {
   getKamisByAccount,
   type WatchlistItem
 } from '../services/api';
+import { getUserSettings, getProfiles, invalidateUserCache, invalidateWalletCache } from '../lib/cachedApi';
 import { supabase } from '../services/supabase';
 import { findShortestPath } from '../utils/roomPathfinding';
 import { NODE_LIST } from '../assets/nodeList';
 import { getBackgroundList } from '../assets/backgrounds';
 import { getItemName } from '../utils/itemMapping';
+
+import { clearAllCache } from '../lib/cache';
 
 // Stat Icons
 import HealthIcon from '../assets/stats/health.png';
@@ -429,6 +430,13 @@ StatRow.displayName = 'StatRow';
 
 const CharacterManagerPWA = () => {
   const { user, authenticated, logout } = usePrivy();
+  
+  // Custom logout handler
+  const handleLogout = useCallback(async () => {
+    clearAllCache();
+    await logout();
+  }, [logout]);
+
   const [profiles, setProfiles] = useState<OperatorWallet[]>([]);
   const [currentProfileIndex, setCurrentProfileIndex] = useState(0);
   const [selectedChar, setSelectedChar] = useState<Kami | null>(null);
@@ -1232,6 +1240,7 @@ const CharacterManagerPWA = () => {
       const { success, profile } = await addProfile(user.id, newProfile.name, newProfile.address, newProfile.privateKey);
       if (success) {
         addLog(`Profile "${profile.name}" added successfully`, 'success');
+        invalidateWalletCache(user.id); // Clear cache
         setNewProfile({ name: '', address: '', privateKey: '' });
         setRefreshKey(prev => prev + 1);
       } else {
@@ -1250,6 +1259,7 @@ const CharacterManagerPWA = () => {
     try {
       const { success } = await updateTelegramSettings(user.id, telegramConfig.botToken, telegramConfig.chatId);
       if (success) {
+        invalidateUserCache(user.id); // Clear cache
         addLog('Telegram settings saved', 'success');
       } else {
         addLog('Failed to save Telegram settings', 'error');
@@ -1957,7 +1967,7 @@ const CharacterManagerPWA = () => {
                     {user?.id || 'Unknown'}
                   </div>
                   <button 
-                    onClick={logout}
+                    onClick={handleLogout}
                     className="w-full bg-red-600 hover:bg-red-500 text-white px-6 py-3 rounded font-bold flex items-center justify-center gap-2 shadow-lg transition-transform active:scale-95"
                   >
                     <LogOut className="w-5 h-5" />
