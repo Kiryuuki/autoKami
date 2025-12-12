@@ -73,7 +73,18 @@ export async function processCraftingAutomation() {
 
         for (const setting of settingsList) {
             const wallet = setting.operator_wallets;
-            const lastRun = setting.last_run_at ? new Date(setting.last_run_at) : new Date(0);
+            
+            // Initialize lastRun to prevent immediate execution on fresh start
+            // Similar to feed logic, we assume "interval" means wait X mins from now.
+            let lastRun = setting.last_run_at ? new Date(setting.last_run_at) : null;
+            
+            if (!lastRun) {
+                // If never run, set to NOW so we wait one interval
+                lastRun = new Date();
+                // Update DB to persist this baseline
+                await updateCraftingLastRun(setting.id!);
+            }
+
             const now = new Date();
             const elapsedMinutes = (now.getTime() - lastRun.getTime()) / 60000;
 
@@ -107,7 +118,7 @@ export async function processCraftingAutomation() {
                         user_id: wallet.user_id,
                         action: 'auto_craft_skip',
                         status: 'info',
-                        message: `[Wallet: ${wallet.name}] Auto-crafting skipped: Insufficient Items for ${recipe.name}: ${missingStr}. Waiting ${setting.interval_minutes} mins.`,
+                        message: `[Auto Craft: ${wallet.name}] Skipped: Insufficient Items for ${recipe.name}: ${missingStr}. Waiting ${setting.interval_minutes} mins.`,
                         metadata: { missing: missingItems, recipe: recipe.name, wallet: wallet.name }
                     });
                     
@@ -127,7 +138,7 @@ export async function processCraftingAutomation() {
                         user_id: wallet.user_id,
                         action: 'auto_craft_start',
                         status: 'info',
-                        message: `[Wallet: ${wallet.name}] Stamina check passed (${stamina} >= ${requiredStamina}). Starting auto-craft for ${recipe.name} (x${setting.amount_to_craft})...`,
+                        message: `[Auto Craft: ${wallet.name}] Stamina check passed (${stamina} >= ${requiredStamina}). Starting craft for ${recipe.name} (x${setting.amount_to_craft})...`,
                         metadata: { stamina, required: requiredStamina, recipe: recipe.name, wallet: wallet.name }
                     });
 
@@ -158,7 +169,7 @@ export async function processCraftingAutomation() {
                                 user_id: wallet.user_id,
                                 action: 'auto_craft',
                                 status: 'success',
-                                message: `[Wallet: ${wallet.name}] Auto-crafted ${recipe.name} (x${setting.amount_to_craft}). Consumed ${requiredStamina} Stamina.`,
+                                message: `[Auto Craft: ${wallet.name}] Crafted ${recipe.name} (x${setting.amount_to_craft}). Consumed ${requiredStamina} Stamina.`,
                                 metadata: { txHash: result.txHash, recipeId: setting.recipe_id, amount: setting.amount_to_craft, cost: requiredStamina, wallet: wallet.name }
                             });
                         } else {
@@ -175,7 +186,7 @@ export async function processCraftingAutomation() {
                                     user_id: wallet.user_id,
                                     action: 'auto_craft_fail',
                                     status: 'error',
-                                    message: `[Wallet: ${wallet.name}] Auto-craft failed after 3 attempts: ${result.error}. Will retry in ${setting.interval_minutes} mins.`,
+                                    message: `[Auto Craft: ${wallet.name}] Failed after 3 attempts: ${result.error}. Will retry in ${setting.interval_minutes} mins.`,
                                     metadata: { error: result.error, wallet: wallet.name }
                                 });
                             }
@@ -189,7 +200,7 @@ export async function processCraftingAutomation() {
                         user_id: wallet.user_id,
                         action: 'auto_craft_skip',
                         status: 'info',
-                        message: `[Wallet: ${wallet.name}] Auto-crafting skipped: Insufficient Stamina (${stamina}/${requiredStamina}) for ${recipe.name}. Waiting ${setting.interval_minutes} mins.`,
+                        message: `[Auto Craft: ${wallet.name}] Skipped: Insufficient Stamina (${stamina}/${requiredStamina}) for ${recipe.name}. Waiting ${setting.interval_minutes} mins.`,
                         metadata: { stamina, required: requiredStamina, recipe: recipe.name, wallet: wallet.name }
                     });
 
@@ -208,7 +219,7 @@ async function processAutomation() {
         // 1. Fetch all enabled automation profiles
         const { data: profiles, error } = await supabase
             .from('kami_profiles')
-            .select('*, kamigotchis!inner(kami_entity_id, encrypted_private_key, user_id, kami_index, kami_name, account_id)')
+            .select('*, kamigotchis!inner(kami_entity_id, encrypted_private_key, user_id, kami_index, kami_name, account_id, room_name)')
             .eq('auto_harvest_enabled', true);
 
         if (error) throw error;
@@ -240,6 +251,12 @@ async function checkKami(profile: any) {
     const kamiId = kami.kami_entity_id;
     const userId = kami.user_id;
     const strategy = profile.strategy_type || 'harvest_rest';
+    
+    // Format helpers
+    const strategyLabel = strategy === 'harvest_feed' ? 'Harvest & Feed' : 'Harvest & Rest';
+    const kamiLabel = `Kami ${kami.kami_name || 'Unknown'} (#${kami.kami_index})`;
+    // Use stored room name if available, else Node index
+    const locationStr = kami.room_name ? `${kami.room_name}` : `Node #${profile.harvest_node_index ?? '?'}`;
 
     try {
         // Check on-chain status
@@ -256,7 +273,7 @@ async function checkKami(profile: any) {
                 kami_profile_id: profile.id,
                 action: 'state_sync',
                 status: 'info',
-                message: `State mismatch corrected. On-chain: ${isHarvesting ? 'Harvesting' : 'Resting'}`
+                message: `[${strategyLabel}] : ${kamiLabel} at ${locationStr} - State mismatch corrected. On-chain: ${isHarvesting ? 'Harvesting' : 'Resting'}`
             });
         }
 
@@ -270,7 +287,21 @@ async function checkKami(profile: any) {
                 const intervalMinutes = profile.feed_interval_minutes || 0;
                 
                 if (intervalMinutes > 0) {
-                    const lastFeed = profile.last_feed_at ? new Date(profile.last_feed_at) : new Date(0);
+                    // Initialize lastFeed to prevent immediate execution on start/restart
+                    // Use automation_started_at as anchor if available, else NOW.
+                    let lastFeed = profile.last_feed_at ? new Date(profile.last_feed_at) : null;
+                    
+                    if (!lastFeed) {
+                        const anchorTime = profile.automation_started_at || new Date().toISOString();
+                        lastFeed = new Date(anchorTime);
+                        
+                        // Persist initialization to DB so we don't drift
+                        await updateKamiProfile(profile.kamigotchi_id, {
+                            last_feed_at: anchorTime
+                        });
+                        console.log(`[Automation] Kami #${kami.kami_index}: Initialized feed timer to ${anchorTime}. Next feed in ${intervalMinutes} mins.`);
+                    }
+
                     const elapsedMinutes = (now.getTime() - lastFeed.getTime()) / 60000;
                     
                     if (elapsedMinutes >= intervalMinutes) {
@@ -284,7 +315,7 @@ async function checkKami(profile: any) {
                         if (profile.feed_item_id_2) feedItems.push(profile.feed_item_id_2);
 
                         if (feedItems.length === 0) {
-                            console.warn(`[Automation] Kami #${kami.kami_index}: Strategy is 'harvest_feed' but no feed items configured.`);
+                            console.warn(`[Automation] Kami #${kami.kami_index}: Strategy is 'harvest_feed' but no feed items configured (Primary: ${profile.feed_item_id}, Secondary: ${profile.feed_item_id_2}).`);
                             return;
                         }
 
@@ -334,7 +365,7 @@ async function checkKami(profile: any) {
                                         inventory = await getAccountInventory(kami.account_id);
                                         const newCount = inventory[itemId] || 0;
                                         
-                                        let msg = `Kami fed successfully with ${itemName}. Remaining: ${newCount}.`;
+                                        let msg = `[${strategyLabel}] : ${kamiLabel} fed successfully with ${itemName}. Remaining: ${newCount}.`;
                                         let status: 'success' | 'warning' = 'success';
 
                                         if (newCount === 0) {
@@ -389,7 +420,7 @@ async function checkKami(profile: any) {
                                 kami_profile_id: profile.id,
                                 action: 'auto_feed_critical_stop',
                                 status: 'error',
-                                message: `CRITICAL: Could not feed Kami (Out of ${primaryItemName} or Tx Failed). Harvesting STOPPED to prevent death.`,
+                                message: `[${strategyLabel}] : ${kamiLabel} - CRITICAL: Could not feed (Out of ${primaryItemName} or Tx Failed). Harvesting STOPPED to prevent death.`,
                                 metadata: { txHash: stopResult.success ? stopResult.txHash : undefined, error: stopResult.error }
                             });
                             
@@ -416,7 +447,7 @@ async function checkKami(profile: any) {
                     kami_profile_id: profile.id,
                     action: 'low_health_stop',
                     status: 'warning',
-                    message: `[Kami #${kami.kami_index} (${kami.kami_name || 'Unknown'})] Health critically low (${currentHealth} / ${minHealth}). Emergency stop triggered (Node #${profile.harvest_node_index ?? '?'}).`
+                    message: `[${strategyLabel}] : ${kamiLabel} at ${locationStr} - Health critically low (${currentHealth} / ${minHealth}). Emergency stop triggered.`
                 });
 
                 const privateKey = await decryptPrivateKey(kami.encrypted_private_key);
@@ -434,7 +465,7 @@ async function checkKami(profile: any) {
                         kami_profile_id: profile.id,
                         action: 'low_health_stop',
                         status: 'success',
-                        message: `Emergency stop successful due to low health (${currentHealth} HP). Resting started.`,
+                        message: `[${strategyLabel}] : ${kamiLabel} - Emergency stop successful due to low health (${currentHealth} HP). Resting started.`,
                         metadata: { txHash: result.txHash, currentHealth }
                     });
                     return; // Skip duration check if stopped
@@ -460,7 +491,7 @@ async function checkKami(profile: any) {
                             kami_profile_id: profile.id,
                             action: 'auto_stop',
                             status: 'info',
-                            message: `[Kami #${kami.kami_index} (${kami.kami_name || 'Unknown'})] Harvest time exceeded (${Math.floor(elapsed/60000)}m / ${profile.harvest_duration}m). Stopping harvest (Node #${profile.harvest_node_index ?? '?'}).`
+                            message: `[${strategyLabel}] : ${kamiLabel} at ${locationStr} - Harvest time exceeded (${Math.floor(elapsed/60000)}m / ${profile.harvest_duration}m). Stopping harvest.`
                         });
 
                         const privateKey = await decryptPrivateKey(kami.encrypted_private_key);
@@ -478,7 +509,7 @@ async function checkKami(profile: any) {
                                 kami_profile_id: profile.id,
                                 action: 'auto_stop',
                                 status: 'success',
-                                message: `Harvest stopped successfully (Node #${profile.harvest_node_index ?? '?'}). Entering rest mode.`,
+                                message: `[${strategyLabel}] : ${kamiLabel} - Harvest stopped successfully. Entering rest mode.`,
                                 metadata: { txHash: result.txHash }
                             });
                         } else {
@@ -512,7 +543,7 @@ async function checkKami(profile: any) {
                         kami_profile_id: profile.id,
                         action: 'auto_start',
                         status: 'info',
-                        message: `[Kami #${kami.kami_index} (${kami.kami_name || 'Unknown'})] Rest duration exceeded (${Math.floor(elapsed/60000)}m / ${profile.rest_duration}m). Starting harvest at Node #${nodeIndex}.`
+                        message: `[${strategyLabel}] : ${kamiLabel} - Rest duration exceeded (${Math.floor(elapsed/60000)}m / ${profile.rest_duration}m). Starting harvest at ${locationStr}.`
                     });
 
                     const privateKey = await decryptPrivateKey(kami.encrypted_private_key);
@@ -534,7 +565,7 @@ async function checkKami(profile: any) {
                             kami_profile_id: profile.id,
                             action: 'automation_stopped',
                             status: 'error',
-                            message: msg,
+                            message: `[${strategyLabel}] : ${kamiLabel} - ${msg}`,
                             metadata: { currentRoom: account.room, targetNode: nodeIndex }
                         });
                         return; // Stop processing for this Kami
@@ -585,7 +616,7 @@ async function checkKami(profile: any) {
                             kami_profile_id: profile.id,
                             action: 'auto_start',
                             status: 'success',
-                            message: `Harvest started successfully at Node #${nodeIndex} (Harvest ID: ${result.harvestId || '?'}).`,
+                            message: `[${strategyLabel}] : ${kamiLabel} - Harvest started successfully at ${locationStr} (Harvest ID: ${result.harvestId || '?'}).`,
                             metadata: { txHash: result.txHash, harvestId: result.harvestId }
                         });
                     } else {
@@ -612,7 +643,7 @@ async function checkKami(profile: any) {
                 kami_profile_id: profile.id,
                 action: 'automation_stopped_critical',
                 status: 'error',
-                message: `[Kami #${kami.kami_index}] CRITICAL: Active Harvest ID lost (likely started manually before update). Automation DISABLED. Please STOP harvest manually via game UI to reset state.`,
+                message: `[${strategyLabel}] : ${kamiLabel} - CRITICAL: Active Harvest ID lost (likely started manually before update). Automation DISABLED. Please STOP harvest manually via game UI to reset state.`,
                 metadata: { error: errorMsg }
             });
             return;
@@ -624,7 +655,7 @@ async function checkKami(profile: any) {
             kami_profile_id: profile.id,
             action: 'automation_error',
             status: 'error',
-            message: `[Kami #${kami.kami_index} (${kami.kami_name || 'Unknown'})] Automation failed: ${errorMsg}`,
+            message: `[${strategyLabel}] : ${kamiLabel} - Automation failed: ${errorMsg}`,
             metadata: { error: errorMsg }
         });
     }
