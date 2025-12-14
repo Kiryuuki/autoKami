@@ -21,6 +21,15 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
   console.log('✅ Supabase client initialized');
 }
 
+export function reinitSupabase() {
+    const url = process.env.SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+    if (url && key) {
+        supabase = createClient(url, key);
+        console.log('🔄 Supabase client re-initialized with new env');
+    }
+}
+
 // Encryption utilities using AES-256-GCM
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
@@ -415,6 +424,12 @@ export interface KamiProfile {
   total_harvests: number;
   total_rests: number;
   automation_started_at: string | null;
+  strategy_type?: string;
+  feed_item_id?: number;
+  feed_item_id_2?: number;
+  feed_trigger_value?: number;
+  feed_interval_minutes?: number;
+  last_feed_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -447,7 +462,13 @@ export async function getOrCreateKamiProfile(kamigotchiId: string, operatorWalle
       is_currently_harvesting: false,
       total_harvests: 0,
       total_rests: 0,
-      automation_started_at: null
+      automation_started_at: null,
+      strategy_type: 'harvest_rest',
+      feed_item_id: null,
+      feed_item_id_2: null,
+      feed_trigger_value: 50,
+      feed_interval_minutes: 0,
+      last_feed_at: null
     })
     .select()
     .single();
@@ -489,6 +510,12 @@ export async function updateKamiProfile(kamigotchiId: string, updates: Partial<K
       total_harvests: 0,
       total_rests: 0,
       automation_started_at: null,
+      strategy_type: 'harvest_rest',
+      feed_item_id: null,
+      feed_item_id_2: null,
+      feed_trigger_value: 50,
+      feed_interval_minutes: 0,
+      last_feed_at: null,
       ...updates // Apply the updates to the new profile
     })
     .select()

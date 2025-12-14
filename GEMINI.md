@@ -112,6 +112,13 @@
 - ✅ User settings for chat ID configuration
 - ✅ Error notifications for automation failures
 
+#### 9. Harvest and Feed Strategy - BACKEND COMPLETE
+- ✅ Database migration created (`20251211_add_feed_strategy.sql`)
+- ✅ `feedService.ts` implemented with `walletMutex`
+- ✅ `automationService.ts` updated to handle `harvest_feed` strategy
+- ✅ Test script created (`test-feed-kami.ts`)
+- ⚠️ Frontend UI pending
+
 ### 🔄 PARTIALLY COMPLETE / NEEDS VERIFICATION
 
 #### 1. Supabase Edge Functions
@@ -141,6 +148,14 @@
 - ❌ Unit tests for services
 - ❌ Integration tests for automation
 - ❌ E2E tests for frontend
+
+---
+
+## Gemini Added Memories
+- for all llm queries on this app, we'll only use Gemini 3.0 pro
+- for every action, especially on chain action, logs should be shown on frontend and telegram in order to show user what actually happens and make it easier to debug
+- The most efficient way to track Kamis on specific nodes for a Watchlist is to query specific target Accounts using `IDOwnsKamiComponent` and then check the Room property of their owned Kamis via `GetterSystem`, rather than scanning the Node directly. This logic is documented in GEMINI.md under 'Feature Research: Watchlist Strategy'.
+- **Versioning**: The application version number must be displayed on the frontend UI. Start at V1.01 and increment by .01 per update.
 
 ---
 
@@ -1325,6 +1340,65 @@ async function checkAccountActivity(targetAccountId: string, targetNodeIndex: nu
     return matches;
 }
 ```
+
+## Feature Research: Node Distance & Pathfinding Strategy
+
+### Goal
+Determine the distance and best route between two rooms (nodes) in the Kamigotchi world. This is crucial for:
+1.  **Watchlist Strategy**: Calculating how far away a tracked target is from your Kamis.
+2.  **Automation**: Optimizing movement paths to reach target harvesting nodes.
+
+### Data Source
+-   **File**: `mapping/room_connection_map.tsx`
+-   **Structure**: Graph where rooms are nodes and exits are directed edges.
+
+### Implementation Pattern
+
+**Utility**: `app/src/utils/roomPathfinding.ts`
+
+**Algorithm**: Breadth-First Search (BFS) for shortest unweighted path.
+
+**Usage**:
+```typescript
+import { findShortestPath } from '../utils/roomPathfinding';
+
+const startId = 72; // Hatch to Nowhere
+const targetId = 69; // Lotus Pool
+
+const result = findShortestPath(startId, targetId);
+// Returns:
+// {
+//   path: [72, 71, 70, 69],
+//   distance: 3,
+//   names: ["Hatch to Nowhere", "Shabby Deck", "Still Stream", "Lotus Pool"]
+// }
+```
+
+**Known Paths (Verified)**:
+-   **Hatch to Nowhere (72) → Lotus Pool (69)**: 3 Hops (`72 -> 71 -> 70 -> 69`).
+-   **Note**: Some nodes in the map data appear disconnected or have missing intermediate nodes (e.g., Node 1 points to 20, but 20 is not defined). Pathfinding logic handles this by returning `null` if no path exists.
+
+## Feature Research: Harvest and Feed Strategy
+
+### Goal
+Implement a new automation strategy where Kamis consume items to recover health/stamina instead of resting for a duration.
+
+### Concepts
+- **Strategies**:
+    1. **Harvest & Rest** (Current): Harvest for X minutes, Rest for Y minutes.
+    2. **Harvest & Feed** (New): Harvest until health/stamina is low (or on a timer), then consume a specific item to recover.
+- **Data Model Changes**:
+    - Add `strategy_type` to `kami_profiles` (enum: 'harvest_rest', 'harvest_feed').
+    - Add `feed_item_id` to `kami_profiles` (which item to consume).
+    - Add `feed_trigger_value` (optional, e.g., feed when health < 50%).
+    - Add `feed_timer` (optional, cooldown or interval).
+
+### Implementation Plan
+1. **Research Item Usage**: Verify `KamiUseItemSystem` or `AccountUseItemSystem` for feeding mechanics.
+2. **Test Script**: Create `test-feed-kami.ts` to verify on-chain feeding.
+3. **Database**: Update schema to support multiple strategies.
+4. **Backend**: Update `automationService` to handle 'harvest_feed' logic.
+5. **Frontend**: UI for selecting strategy and configuring feed items.
 
 ---
 

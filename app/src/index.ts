@@ -29,7 +29,7 @@ app.use(express.json());
 app.use((req, res, next) => {
   res.setHeader(
     'Content-Security-Policy',
-    "default-src 'self'; font-src 'self' data:; img-src 'self' data: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss:;"
+    "default-src 'self'; frame-src 'self' https://auth.privy.io https://verify.privy.io; font-src 'self' data:; img-src 'self' data: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://auth.privy.io; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss:;"
   );
   next();
 });
@@ -45,8 +45,6 @@ app.get('/health', (req, res) => {
 // Routes
 app.use('/api/kami', kamiRoutes);
 import watchlistRoutes from './routes/watchlistRoutes.js';
-
-// ... (existing imports)
 
 app.use('/api/watchlist', watchlistRoutes);
 app.use('/api/account', accountRoutes);
@@ -80,7 +78,7 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 Kamigotchi API server running on port ${PORT}`);
   console.log(`📡 Health check: http://localhost:${PORT}/health`);
   
@@ -108,3 +106,6 @@ app.listen(PORT, () => {
   console.log(`   POST /api/kamigotchis/:id/harvest/stop`);
   console.log(`   POST /api/kamigotchis/:id/harvest/auto`);
 });
+
+// Increase server timeout to 10 minutes to handle slow blockchain transactions
+server.setTimeout(600000);

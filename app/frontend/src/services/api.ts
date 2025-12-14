@@ -11,7 +11,7 @@ const KAMI_IMAGE_BASE = import.meta.env.VITE_KAMI_IMAGE_BASE_URL || 'https://i.t
 
 const api = axios.create({
   baseURL: API_URL,
-  timeout: 120000, // 2 minutes - account retrieval with many Kamis can be slow
+  timeout: 300000, // 5 minutes - blockchain transactions can be slow
 });
 
 export interface Stat {
@@ -183,6 +183,11 @@ export interface AutomationSettings {
   totalHarvests?: number;
   totalRests?: number;
   automationStartedAt?: string | null;
+  strategyType?: 'harvest_rest' | 'harvest_feed';
+  feedItemId?: number | null;
+  feedItemId2?: number | null;
+  feedTriggerValue?: number;
+  feedIntervalMinutes?: number;
 }
 
 export interface KamigotchiData {
@@ -313,6 +318,11 @@ export interface WatchlistItem {
 export const getWatchlist = async (privyUserId: string): Promise<WatchlistItem[]> => {
   const response = await api.get('/watchlist', { params: { privyUserId } });
   return response.data.items;
+};
+
+export const getWatchlistLive = async (privyUserId: string): Promise<Record<string, any[]>> => {
+  const response = await api.get('/watchlist/live', { params: { privyUserId } });
+  return response.data.results;
 };
 
 export const addToWatchlist = async (
