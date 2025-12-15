@@ -1,5 +1,5 @@
 import express from 'express';
-import { supabase } from '../services/supabaseService.js';
+import supabase from '../services/supabaseService.js';
 import { 
     getWatchlistData, 
     addAccountToWatchlist, 
@@ -36,7 +36,8 @@ async function getUserAccountIds(userId: string): Promise<string[]> {
     }
 
     // 3. Return unique account IDs
-    return [...new Set(kamis.map((k: any) => k.account_id as string))];
+    const ids: string[] = kamis.map((k: any) => String(k.account_id));
+    return Array.from(new Set(ids));
 }
 
 // GET /watchlist - Get user's watchlist (list of account IDs)

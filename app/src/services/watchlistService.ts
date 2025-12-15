@@ -1,7 +1,7 @@
 import { getKamisByAccountId, getAccountById } from './accountService.js';
 import { getRoomName, findShortestPath, PathResult } from '../utils/roomPathfinding.js';
 import { MappedKamiData } from './kamiService.js';
-import { supabase } from './supabaseService.js';
+import supabase from './supabaseService.js';
 
 export interface KamiLocation {
     id: string;
