@@ -341,8 +341,8 @@ export const getWatchlistLive = async (privyUserId: string): Promise<WatchlistRe
   return response.data.data;
 };
 
-export const addToWatchlist = async (privyUserId: string, targetAccountId: string): Promise<void> => {
-  await api.post('/watchlist', { privyUserId, targetAccountId });
+export const addToWatchlist = async (privyUserId: string, targetAccountId?: string, targetKamiIndex?: number): Promise<void> => {
+  await api.post('/watchlist', { privyUserId, targetAccountId, targetKamiIndex });
 };
 
 export const removeFromWatchlist = async (privyUserId: string, targetAccountId: string): Promise<void> => {

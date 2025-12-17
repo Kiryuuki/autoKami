@@ -22,6 +22,7 @@ import {
   removeFromWatchlist,
   searchAccount,
   getKamisByAccount,
+  getKamiByIndex,
   type WatchlistResult
 } from '../services/api';
 import { getUserSettings, getProfiles, invalidateUserCache, invalidateWalletCache } from '../lib/cachedApi';
@@ -561,6 +562,7 @@ const CharacterManagerPWA = () => {
   const [watchlistSearchQuery, setWatchlistSearchQuery] = useState('');
   const [watchlistAccount, setWatchlistAccount] = useState<any>(null);
   const [watchlistSearchResults, setWatchlistSearchResults] = useState<any[]>([]);
+  const [watchlistSearchType, setWatchlistSearchType] = useState<'account' | 'kami'>('account');
   const [loadingWatchlist, setLoadingWatchlist] = useState(false);
   const [minDistanceToTarget, setMinDistanceToTarget] = useState<number | null>(null);
   const [collapsedAccounts, setCollapsedAccounts] = useState<Record<string, boolean>>({});
@@ -644,7 +646,26 @@ const CharacterManagerPWA = () => {
     setWatchlistSearchResults([]);
     
     try {
-        const account = await searchAccount(watchlistSearchQuery);
+        let accountIdToSearch = watchlistSearchQuery;
+
+        if (watchlistSearchType === 'kami') {
+            try {
+                const index = parseInt(watchlistSearchQuery, 10);
+                if (isNaN(index)) throw new Error("Invalid Kami Index");
+                const kami = await getKamiByIndex(index);
+                if (kami && kami.account) {
+                    accountIdToSearch = kami.account;
+                } else {
+                    throw new Error("Kami not found or has no owner");
+                }
+            } catch (e: any) {
+                alert(e.message || "Failed to resolve Kami");
+                setLoadingWatchlist(false);
+                return;
+            }
+        }
+
+        const account = await searchAccount(accountIdToSearch);
         if (account) {
             setWatchlistAccount(account);
             try {
@@ -659,7 +680,7 @@ const CharacterManagerPWA = () => {
     } finally {
         setLoadingWatchlist(false);
     }
-  }, [watchlistSearchQuery]);
+  }, [watchlistSearchQuery, watchlistSearchType]);
 
   // Add/Remove Watchlist
   const toggleWatchlistAccount = useCallback(async (accountId: string) => {
@@ -1627,10 +1648,13 @@ const CharacterManagerPWA = () => {
                                                 <div className="space-y-1">
                                                     <div className="text-[9px] text-gray-500 font-bold uppercase">Kamis:</div>
                                                     {targetAccount.kamis.map(kami => (
-                                                        <div key={kami.id} className="flex justify-between items-center">
+                                                        <div key={kami.id} className="flex justify-between items-center py-0.5">
                                                             <div className="flex items-center gap-2">
-                                                                <div className={`w-2 h-2 rounded-full ${kami.state === 'Harvesting' ? 'bg-green-500' : 'bg-orange-500'}`} title={kami.state}></div>
-                                                                <span className="font-bold text-gray-700 dark:text-gray-300">{kami.name}</span>
+                                                                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${kami.state === 'Harvesting' ? 'bg-green-500' : 'bg-orange-500'}`} title={kami.state}></div>
+                                                                <div className="flex flex-col">
+                                                                    <div className="font-bold text-gray-700 dark:text-gray-300 leading-tight">{kami.name}</div>
+                                                                    <div className="text-[9px] text-gray-500 leading-tight">{kami.roomName || `Node ${kami.roomIndex}`}</div>
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     ))}
@@ -1667,11 +1691,27 @@ const CharacterManagerPWA = () => {
             <div className="p-6 space-y-6">
                 {/* Search Section */}
                 <div className="bg-black/20 p-4 rounded-lg">
-                    <label className="block text-sm font-bold mb-2 text-gray-400">Add Account by ID</label>
+                    <div className="flex justify-between items-center mb-2">
+                        <label className="text-sm font-bold text-gray-400">Add to Watchlist</label>
+                        <div className="flex bg-gray-800 rounded p-1">
+                            <button 
+                                onClick={() => setWatchlistSearchType('account')}
+                                className={`px-2 py-0.5 text-xs font-bold rounded ${watchlistSearchType === 'account' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                            >
+                                Account ID
+                            </button>
+                            <button 
+                                onClick={() => setWatchlistSearchType('kami')}
+                                className={`px-2 py-0.5 text-xs font-bold rounded ${watchlistSearchType === 'kami' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                            >
+                                Kami Index
+                            </button>
+                        </div>
+                    </div>
                     <div className="flex gap-2">
                         <input 
                             type="text" 
-                            placeholder="e.g. 11835" 
+                            placeholder={watchlistSearchType === 'account' ? "e.g. 11835" : "e.g. 123"}
                             className={`${theme.input} flex-1 p-2`}
                             value={watchlistSearchQuery}
                             onChange={(e) => setWatchlistSearchQuery(e.target.value)}

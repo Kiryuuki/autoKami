@@ -4,7 +4,8 @@ import {
     getWatchlistData, 
     addAccountToWatchlist, 
     removeAccountFromWatchlist, 
-    getUserWatchlist 
+    getUserWatchlist,
+    getAccountIdByKamiIndex
 } from '../services/watchlistService.js';
 
 const router = express.Router();
@@ -91,13 +92,29 @@ router.get('/live', async (req, res) => {
 // POST /watchlist - Add account to watchlist
 router.post('/', async (req, res) => {
     try {
-        const { privyUserId, targetAccountId } = req.body;
-        if (!privyUserId || !targetAccountId) {
-            return res.status(400).json({ error: 'Missing privyUserId or targetAccountId' });
+        const { privyUserId, targetAccountId, targetKamiIndex } = req.body;
+        
+        if (!privyUserId) {
+             return res.status(400).json({ error: 'Missing privyUserId' });
         }
 
-        await addAccountToWatchlist(privyUserId, targetAccountId);
-        res.json({ success: true });
+        let accountIdToAdd = targetAccountId;
+
+        // If Kami Index provided, resolve to Account ID
+        if (targetKamiIndex !== undefined && targetKamiIndex !== null) {
+            try {
+                accountIdToAdd = await getAccountIdByKamiIndex(Number(targetKamiIndex));
+            } catch (err: any) {
+                return res.status(404).json({ error: err.message });
+            }
+        }
+
+        if (!accountIdToAdd) {
+            return res.status(400).json({ error: 'Missing targetAccountId or targetKamiIndex' });
+        }
+
+        await addAccountToWatchlist(privyUserId, accountIdToAdd);
+        res.json({ success: true, addedAccountId: accountIdToAdd });
     } catch (error: any) {
         console.error('[WatchlistRoutes] Error adding to watchlist:', error);
         res.status(500).json({ error: error.message });

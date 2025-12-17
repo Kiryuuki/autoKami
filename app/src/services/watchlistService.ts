@@ -1,6 +1,6 @@
 import { getKamisByAccountId, getAccountById } from './accountService.js';
 import { getRoomName, findShortestPath, PathResult } from '../utils/roomPathfinding.js';
-import { MappedKamiData } from './kamiService.js';
+import { MappedKamiData, getKamiByIndex } from './kamiService.js';
 import supabase from './supabaseService.js';
 
 export interface KamiLocation {
@@ -25,6 +25,21 @@ export interface WatchlistResult {
         accountId: string;
         distance: number | null; // Distance to target account's Kami
     }[];
+}
+
+/**
+ * Resolves an Account ID from a Kami Index.
+ * @param kamiIndex The index of the Kami.
+ * @returns The Account ID that owns the Kami.
+ */
+export async function getAccountIdByKamiIndex(kamiIndex: number): Promise<string> {
+    console.log(`[WatchlistService] Resolving Account ID for Kami Index: ${kamiIndex}`);
+    const kami = await getKamiByIndex(kamiIndex);
+    if (!kami || !kami.account) {
+        throw new Error(`Kami #${kamiIndex} not found or has no owner.`);
+    }
+    console.log(`[WatchlistService] Kami #${kamiIndex} is owned by Account ${kami.account}`);
+    return kami.account;
 }
 
 /**
