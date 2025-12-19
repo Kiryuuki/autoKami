@@ -74,16 +74,8 @@ export async function processCraftingAutomation() {
         for (const setting of settingsList) {
             const wallet = setting.operator_wallets;
             
-            // Initialize lastRun to prevent immediate execution on fresh start
-            // Similar to feed logic, we assume "interval" means wait X mins from now.
-            let lastRun = setting.last_run_at ? new Date(setting.last_run_at) : null;
-            
-            if (!lastRun) {
-                // If never run, set to NOW so we wait one interval
-                lastRun = new Date();
-                // Update DB to persist this baseline
-                await updateCraftingLastRun(setting.id!);
-            }
+            // If never run (null), default to Epoch 0 so it runs immediately
+            let lastRun = setting.last_run_at ? new Date(setting.last_run_at) : new Date(0);
 
             const now = new Date();
             const elapsedMinutes = (now.getTime() - lastRun.getTime()) / 60000;

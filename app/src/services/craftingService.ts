@@ -4,7 +4,8 @@ import { getSystemAddress } from './transactionService.js';
 import { walletMutex } from '../utils/walletMutex.js';
 
 // Load ABIs and Config dynamically
-const CraftSystem = loadAbi('CraftSystem.json');
+// Using V2 ABI which supports executeTyped(uint32, uint256)
+const CraftSystem = loadAbi('CraftSystemV2.json'); 
 const SYSTEMS = loadIds('systems.json');
 
 const RPC_URL = process.env.RPC_URL || 'https://archival-jsonrpc-yominet-1.anvil.asia-southeast.initia.xyz';
@@ -27,30 +28,28 @@ export async function craftRecipe(
 
   return walletMutex.runExclusive(wallet.address, async () => {
     try {
-        // Use encodedID (0x...) which getSystemAddress handles
         const systemId = SYSTEMS.CraftSystem.encodedID;
         const systemAddress = await getSystemAddress(systemId);
         
-        // Use Raw Transaction Construction to match known-working script
-        // Selector for craft(uint32,uint256): 0x5c817c70
-        const selector = "0x5c817c70";
-        const arg1 = recipeIndex.toString(16).padStart(64, '0');
-        const arg2 = amount.toString(16).padStart(64, '0');
-        const data = selector + arg1 + arg2;
+        // Use Contract interface instead of raw transaction
+        // This ensures correct function selector for executeTyped(uint32, uint256)
+        const contract = new ethers.Contract(systemAddress, CraftSystem.abi, wallet);
 
         console.log(`[Crafting] Crafting Recipe #${recipeIndex} (x${amount})`);
         console.log(`[Crafting] Target: ${systemAddress}`);
-        // console.log(`[Crafting] Data: ${data}`);
+        
+        // 1. Simulate via static call or estimateGas to catch reverts early
+        try {
+            await contract.executeTyped.staticCall(recipeIndex, BigInt(amount));
+        } catch (simError: any) {
+             console.error(`[Crafting] Simulation failed:`, simError.reason || simError.message);
+             // Try to extract a better error message
+             const reason = simError.reason || (simError.data ? `Revert Data: ${simError.data}` : simError.message);
+             return { success: false, error: `Pre-check failed: ${reason}` };
+        }
 
-        // Fix for "account sequence mismatch": Explicitly fetch the pending nonce
-        const nonce = await provider.getTransactionCount(wallet.address, 'pending');
-        console.log(`[Crafting] Using nonce: ${nonce}`);
-
-        const tx = await wallet.sendTransaction({
-            to: systemAddress,
-            data: data,
-            nonce: nonce
-        });
+        // 2. Execute Transaction
+        const tx = await contract.executeTyped(recipeIndex, BigInt(amount));
 
         console.log(`[Crafting] Tx submitted: ${tx.hash}`);
         
