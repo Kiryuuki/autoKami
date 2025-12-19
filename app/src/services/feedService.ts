@@ -38,10 +38,10 @@ export async function feedKami(
             // For now, assume logic in automationService checks inventory before calling this.
 
     // Execute
+    // executeTyped(uint256 kamiID, uint32 itemIndex)
     const tx = await contract.executeTyped(
       BigInt(kamiId),
-      BigInt(itemId),
-      BigInt(slotIndex)
+      BigInt(itemIndex)
     );
             console.log(`[Feed] ⏳ Tx submitted: ${tx.hash}`);
 
