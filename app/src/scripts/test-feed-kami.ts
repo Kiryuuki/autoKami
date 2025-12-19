@@ -39,8 +39,7 @@ async function feedKami(kamiEntityId: string, itemIndex: number, privateKey: str
         console.log(`[Feed] 📤 Sending transaction...`);
         const tx = await contract.executeTyped(
             BigInt(kamiEntityId),
-            BigInt(itemIndex),
-            { gasLimit: 2000000 }
+            BigInt(itemIndex)
         );
         console.log(`[Feed] ⏳ Tx sent: ${tx.hash}. Waiting for confirmation...`);
 

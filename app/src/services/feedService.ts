@@ -37,11 +37,12 @@ export async function feedKami(
             // The contract will revert if not, but we could check inventory here.
             // For now, assume logic in automationService checks inventory before calling this.
 
-            const tx = await contract.executeTyped(
-                BigInt(kamiId),
-                BigInt(itemIndex),
-                { gasLimit: 2000000 }
-            );
+    // Execute
+    // executeTyped(uint256 kamiID, uint32 itemIndex)
+    const tx = await contract.executeTyped(
+      BigInt(kamiId),
+      BigInt(itemIndex)
+    );
             console.log(`[Feed] ⏳ Tx submitted: ${tx.hash}`);
 
             const receipt = await tx.wait();
