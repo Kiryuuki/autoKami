@@ -268,7 +268,12 @@ export async function getKamiState(kamiId: string): Promise<{ state: number, cur
         const rawState = kami.state;
         console.log(`[Harvest] Raw Kami #${kamiId} state: "${rawState}"`);
 
-        const stateNum = rawState === 'HARVESTING' ? 1 : 0;
+        let stateNum = 0; // Default: RESTING
+        if (rawState === 'HARVESTING') {
+            stateNum = 1;
+        } else if (rawState === 'DEAD') {
+            stateNum = 3;
+        }
 
         return {
             state: stateNum,

@@ -254,6 +254,82 @@ async function checkKami(profile: any) {
     try {
         // Check on-chain status
         const { state, currentHealth } = await getKamiState(kamiId);
+
+        // --- DEAD STATE CHECK (State 3) ---
+        if (state === 3) {
+            console.log(`[Automation] Kami #${kami.kami_index}: Status is DEAD.`);
+            
+            if (profile.auto_revive) {
+                 // Check for Revive Item (11001)
+                 const reviveItemId = 11001;
+                 const inventory = await getAccountInventory(kami.account_id);
+                 const reviveCount = inventory[reviveItemId] || 0;
+                 
+                 if (reviveCount > 0) {
+                     console.log(`[Automation] Kami #${kami.kami_index}: Found Revive Item (11001). Attempting to revive...`);
+                     const privateKey = await decryptPrivateKey(kami.encrypted_private_key);
+                     
+                     const result = await feedKami(
+                        kamiId, 
+                        reviveItemId, 
+                        privateKey, 
+                        userId, 
+                        kami.kami_index, 
+                        profile.id
+                     );
+                     
+                     if (result.success) {
+                         await logSystemEvent({
+                            user_id: userId,
+                            kami_index: kami.kami_index,
+                            kami_profile_id: profile.id,
+                            action: 'auto_revive_success',
+                            status: 'success',
+                            message: `[Auto Revive: ${walletName}] Successfully revived Kami #${kami.kami_index} with Item #11001. Automation STOPPED for safety.`
+                        });
+                     } else {
+                         await logSystemEvent({
+                            user_id: userId,
+                            kami_index: kami.kami_index,
+                            kami_profile_id: profile.id,
+                            action: 'auto_revive_fail',
+                            status: 'error',
+                            message: `[Auto Revive: ${walletName}] Failed to revive Kami #${kami.kami_index}: ${result.error}`,
+                            metadata: { error: result.error }
+                        });
+                     }
+                 } else {
+                     await logSystemEvent({
+                        user_id: userId,
+                        kami_index: kami.kami_index,
+                        kami_profile_id: profile.id,
+                        action: 'auto_revive_skip',
+                        status: 'warning',
+                        message: `[Auto Revive: ${walletName}] Kami #${kami.kami_index} is DEAD but no Revive Item (11001) found in inventory.`
+                    });
+                 }
+            } else {
+                 await logSystemEvent({
+                    user_id: userId,
+                    kami_index: kami.kami_index,
+                    kami_profile_id: profile.id,
+                    action: 'dead_stop',
+                    status: 'error',
+                    message: `[Automation: ${walletName}] Kami #${kami.kami_index} is DEAD. Automation stopped.`
+                });
+            }
+
+            // Always stop automation if DEAD (as per instruction)
+            if (profile.auto_harvest_enabled) {
+                await updateKamiProfile(profile.kamigotchi_id, { 
+                    auto_harvest_enabled: false,
+                    is_currently_harvesting: false,
+                    automation_started_at: null
+                });
+            }
+            return;
+        }
+
         const isHarvesting = state === 1; // 1 = Harvesting
 
         // Log heartbeat if harvesting

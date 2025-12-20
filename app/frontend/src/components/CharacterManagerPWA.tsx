@@ -2200,6 +2200,26 @@ const CharacterManagerPWA = () => {
                     <span className="text-xs text-gray-500">Start harvest when rest ends</span>
                   </div>
                 </label>
+
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <div className="relative">
+                    <input 
+                      type="checkbox" 
+                      className="peer sr-only"
+                      checked={configKami.automation?.autoRevive || false}
+                      onChange={(e) => setConfigKami({
+                        ...configKami,
+                        automation: { ...configKami.automation, autoRevive: e.target.checked }
+                      })}
+                    />
+                    <div className="w-10 h-6 bg-gray-700 rounded-full border-2 border-gray-600 peer-checked:bg-pink-500 peer-checked:border-pink-400 transition-all"></div>
+                    <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-all peer-checked:translate-x-4"></div>
+                  </div>
+                  <div>
+                    <span className="block font-bold text-white group-hover:text-pink-400 transition-colors">Auto-Revive</span>
+                    <span className="text-xs text-gray-500">Revive if DEAD (Item #11001) then STOP</span>
+                  </div>
+                </label>
               </div>
                 </div>
 

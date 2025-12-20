@@ -182,7 +182,8 @@ router.get('/', async (req: Request, res: Response) => {
                             feedItemId2: profile.feed_item_id_2,
                             feedTriggerValue: profile.feed_trigger_value,
                             feedIntervalMinutes: profile.feed_interval_minutes,
-                            lastFeedAt: profile.last_feed_at
+                            lastFeedAt: profile.last_feed_at,
+                            autoRevive: profile.auto_revive
                         },
                         lastSynced: kami.last_synced
                     };
@@ -259,6 +260,7 @@ router.patch('/:id/automation', async (req: Request, res: Response) => {
         if (updates.feedItemId2 !== undefined) dbUpdates.feed_item_id_2 = updates.feedItemId2;
         if (updates.feedTriggerValue !== undefined) dbUpdates.feed_trigger_value = updates.feedTriggerValue;
         if (updates.feedIntervalMinutes !== undefined) dbUpdates.feed_interval_minutes = updates.feedIntervalMinutes;
+        if (updates.autoRevive !== undefined) dbUpdates.auto_revive = updates.autoRevive;
 
         // Update profile if there are harvest settings
         let profile;
@@ -306,6 +308,7 @@ router.patch('/:id/automation', async (req: Request, res: Response) => {
                 feedItemId2: profile.feed_item_id_2,
                 feedTriggerValue: profile.feed_trigger_value,
                 feedIntervalMinutes: profile.feed_interval_minutes,
+                autoRevive: profile.auto_revive,
                 // Crafting
                 autoCraftEnabled: crafting?.is_enabled || false,
                 craftingRecipeId: crafting?.recipe_id || null,

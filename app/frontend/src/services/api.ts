@@ -189,6 +189,7 @@ export interface AutomationSettings {
   feedTriggerValue?: number;
   feedIntervalMinutes?: number;
   lastFeedAt?: string | null;
+  autoRevive?: boolean;
 }
 
 export interface KamigotchiData {
